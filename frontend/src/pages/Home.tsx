@@ -121,7 +121,7 @@ export function Home({ loading, error, onSubmit }: HomeProps) {
               <textarea
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="I am Ace Karaoke, and I'm looking to target a younger audience. What should I do?"
+                placeholder="I run the McDonald's in Arcadia, CA, and I want to reach more college students nearby. What should I do?"
                 disabled={busy}
                 rows={3}
               />
