@@ -7,8 +7,9 @@ biggest influencer, OUTTHERE finds the *right* local content creator for
 your business — ranked by fit, not follower count — and turns that into a
 ready-to-run campaign.
 
-> This README covers the **backend**, which is the current focus. The
-> frontend does not exist yet.
+> This README covers the **backend** in depth. A React/Vite frontend
+> exists in `frontend/` but is not yet wired up to this backend (still
+> using mock data) — that connection is the next piece of work.
 
 ## Problem
 
@@ -35,7 +36,7 @@ business logic lives**, and the FastAPI layer is a thin client of it.
                     USER
                      │
                      ▼
-                FRONTEND (not built yet)
+           FRONTEND (frontend/, not yet wired up)
                      │
                      ▼
               FastAPI (backend/main.py)
@@ -256,7 +257,20 @@ POST /api/campaign/generate
 POST /api/business/{business_id}/presence
 POST /api/outreach/log
 POST /api/video/script
+POST /api/video/ad
 ```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Currently reads from `frontend/src/data/mockData.ts` rather than this
+backend -- wiring it up to the REST endpoints above is the next piece
+of work.
 
 ## Tests
 
