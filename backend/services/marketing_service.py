@@ -12,6 +12,7 @@ templated fallback for every LLM call.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 
 from . import llm_client, places_service
@@ -28,6 +29,10 @@ CATEGORY_KEYWORDS: dict[str, list[str]] = {
     "gaming": ["gaming", "esports", "arcade", "game lounge"],
     "tech": ["tech", "software", "electronics", "computer", "repair shop"],
     "travel": ["travel", "tour", "agency", "excursion"],
+    "nightlife": [
+        "karaoke", "bar", "lounge", "nightclub", "night club", "arcade bar",
+        "bowling", "billiards", "pool hall", "escape room",
+    ],
 }
 
 SUB_CATEGORY_KEYWORDS: dict[str, list[str]] = {
@@ -39,6 +44,8 @@ SUB_CATEGORY_KEYWORDS: dict[str, list[str]] = {
     "boutique": ["boutique", "clothing", "apparel", "streetwear"],
     "gym": ["gym", "fitness", "crossfit", "training"],
     "yoga studio": ["yoga", "pilates"],
+    "karaoke bar": ["karaoke"],
+    "bar": ["bar", "lounge", "nightclub", "night club"],
 }
 
 GOAL_KEYWORDS: dict[str, list[str]] = {
@@ -58,6 +65,7 @@ DEFAULT_INTERESTS_BY_CATEGORY = {
     "gaming": ["gaming", "tech"],
     "tech": ["tech", "gadgets"],
     "travel": ["travel", "local businesses"],
+    "nightlife": ["nightlife", "entertainment", "local businesses"],
 }
 
 
@@ -78,10 +86,18 @@ def _extract_age_range(target_audience: str) -> tuple[int, int]:
     return 18, 45
 
 
-def analyze_business(business_input: dict) -> dict:
+def analyze_business(business_input: dict, place_id: str | None = None) -> dict:
     """Deterministically classify a business into structured marketing
     fields. Kept rule-based (not LLM-based) so this core step never fails
-    or drifts between runs."""
+    or drifts between runs.
+
+    `place_id`: when the caller already knows exactly which real Google
+    Places listing this is (e.g. the user picked it from a disambiguation
+    list in search_businesses), pass it here to fetch that business's
+    details directly -- this skips the fuzzy find-by-text search in
+    lookup_business, so it can't drift to a different, similarly-named
+    business than the one actually confirmed.
+    """
     business_type = business_input.get("business_type", "") or ""
     description = business_input.get("description", "") or ""
     combined_text = f"{business_type} {description}"
@@ -122,9 +138,12 @@ def analyze_business(business_input: dict) -> dict:
     # configured, `google_verified` is simply False and everything else
     # about analyze_business behaves exactly as it did before this existed.
     try:
-        places_data = places_service.lookup_business(
-            result["business_name"], result["location"], business_type
-        )
+        if place_id:
+            places_data = places_service.get_place_details(place_id)
+        else:
+            places_data = places_service.lookup_business(
+                result["business_name"], result["location"], business_type
+            )
     except Exception:
         places_data = None
 
@@ -134,6 +153,90 @@ def analyze_business(business_input: dict) -> dict:
         result["google_verified"] = False
 
     return result
+
+
+# --- Free-text ("general search") business intent extraction ---
+
+_INTENT_FALLBACK_PATTERNS = [
+    re.compile(r"(?:i'?m|i am|this is|we are|we're)\s+([A-Za-z0-9&'.\-]+(?:\s+[A-Za-z0-9&'.\-]+){0,4})", re.IGNORECASE),
+    re.compile(r"(?:my|our)\s+(?:business|shop|store|company)\s+(?:is\s+)?(?:called\s+)?([A-Za-z0-9&'.\-]+(?:\s+[A-Za-z0-9&'.\-]+){0,4})", re.IGNORECASE),
+]
+_STOP_WORDS_AFTER_NAME = re.compile(
+    r"\b(and|looking|targeting|trying|wanting|based|located|hoping|want|need)\b", re.IGNORECASE
+)
+
+
+def _fallback_extract_intent(free_text: str) -> dict:
+    business_name = ""
+    for pattern in _INTENT_FALLBACK_PATTERNS:
+        match = pattern.search(free_text)
+        if match:
+            candidate = match.group(1).strip(" .,")
+            # Trim off a trailing clause like "...Karaoke and I'm looking" -> "Karaoke"
+            stop_match = _STOP_WORDS_AFTER_NAME.search(candidate)
+            if stop_match:
+                candidate = candidate[: stop_match.start()].strip(" .,")
+            if candidate:
+                business_name = candidate
+                break
+    if not business_name:
+        business_name = free_text.strip()[:60]
+
+    return {
+        "business_name": business_name,
+        "location_hint": "",
+        "goal": free_text.strip(),
+        "target_audience": "",
+    }
+
+
+def extract_business_intent(free_text: str) -> dict:
+    """Pull a business name (to search Google Places for) plus goal/
+    audience hints out of a free-text request like "I am ACE Karaoke,
+    looking to target a younger audience". LLM-assisted with a regex
+    fallback so this always returns *something* searchable even offline.
+
+    Returns: {"business_name", "location_hint", "goal", "target_audience"}
+    """
+    fallback = _fallback_extract_intent(free_text)
+
+    prompt = (
+        f'A business owner typed this to a marketing tool: "{free_text}"\n\n'
+        "Extract exactly these fields:\n"
+        "- business_name: just the business's name, nothing else\n"
+        "- location_hint: a city/neighborhood they mentioned, or \"\" if none\n"
+        "- goal: their marketing goal in a few words\n"
+        "- target_audience: who they want to reach. If they describe this qualitatively "
+        "(e.g. \"younger crowd\", \"families\", \"professionals\") rather than with explicit ages, "
+        "translate it into a concrete age range phrase like \"18-27 year olds\" so it's usable "
+        "downstream -- pick a plausible range for that description, don't leave it vague.\n\n"
+        "Respond with ONLY a JSON object, no other text. Example:\n"
+        '{"business_name": "Ace Karaoke", "location_hint": "", "goal": "reach a younger crowd", '
+        '"target_audience": "18-27 year olds"}'
+    )
+    text = llm_client.generate_text(
+        system_prompt="You extract structured business search intent from short free-text requests. Always respond with only a JSON object.",
+        user_prompt=prompt,
+        max_tokens=200,
+    )
+    if not text:
+        return fallback
+
+    try:
+        cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", text.strip())
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return fallback
+
+    if not isinstance(parsed, dict) or not parsed.get("business_name"):
+        return fallback
+
+    return {
+        "business_name": parsed.get("business_name", fallback["business_name"]),
+        "location_hint": parsed.get("location_hint", "") or "",
+        "goal": parsed.get("goal", "") or free_text.strip(),
+        "target_audience": parsed.get("target_audience", "") or "",
+    }
 
 
 def explain_creator_fit(business: dict, creator: dict, score_result: dict, use_llm: bool = True) -> str:

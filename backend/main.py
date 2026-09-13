@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from backend.mcp import client_manager
 from backend.mcp.agent_client import run_agent_workflow
-from backend.services import hubspot_service, llm_client, places_service, veo_service
+from backend.services import hubspot_service, llm_client, places_service, veo_service, web_search_service
 
 
 @asynccontextmanager
@@ -60,6 +60,16 @@ class BusinessInput(BaseModel):
     target_audience: str = ""
     goal: str = ""
     budget: int = 0
+    place_id: str | None = None
+
+
+class DiscoverRequest(BaseModel):
+    query: str
+
+
+class FindBusinessRequest(BaseModel):
+    query: str
+    location_hint: str = ""
 
 
 class RankRequest(BaseModel):
@@ -79,6 +89,14 @@ class OutreachRequest(BaseModel):
     creator: dict
     offer: str
     tone: str = "friendly"
+
+
+class RealSearchRequest(BaseModel):
+    business_id: str
+    category: str
+    location: str
+    target_audience: str = ""
+    max_results: int = 5
 
 
 class LogOutreachRequest(BaseModel):
@@ -140,6 +158,7 @@ async def integrations_status():
         "google_maps": places_service.is_configured(),
         "hubspot": hubspot_service.is_configured(),
         "veo": veo_service.is_configured(),
+        "web_search": web_search_service.is_configured(),
     }
 
 
@@ -168,6 +187,20 @@ async def analyze_business(business: BusinessInput):
     return await _call("analyze_business", {"business": business.model_dump()})
 
 
+@app.post("/api/business/discover")
+async def discover_business(req: DiscoverRequest):
+    """General-search entry point: extract intent from free text and
+    search Google Places for real matching businesses in one call. Returns
+    status found_one/found_multiple/not_found/not_configured -- the
+    frontend shows a disambiguation picker on found_multiple."""
+    return await _call("discover_business_from_text", {"free_text": req.query})
+
+
+@app.post("/api/business/find-real")
+async def find_real_business(req: FindBusinessRequest):
+    return await _call("find_real_business", req.model_dump())
+
+
 @app.post("/api/creators/search")
 async def search_creators(req: SearchRequest):
     return await _call("search_creators", req.model_dump())
@@ -176,6 +209,11 @@ async def search_creators(req: SearchRequest):
 @app.post("/api/creators/rank")
 async def rank_creators(req: RankRequest):
     return await _call("rank_creators", req.model_dump())
+
+
+@app.post("/api/creators/search-real")
+async def search_real_creators(req: RealSearchRequest):
+    return await _call("search_real_creators", req.model_dump())
 
 
 @app.post("/api/outreach/generate")

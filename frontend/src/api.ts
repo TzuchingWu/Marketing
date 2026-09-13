@@ -1,6 +1,7 @@
 import type {
   AnalyzedBusiness,
   BusinessInput,
+  DiscoverResult,
   IntegrationStatus,
   LogOutreachResult,
   PresenceResult,
@@ -60,6 +61,12 @@ export function health(): Promise<{ status: string; mcp_tools: string[] }> {
 
 export function integrationsStatus(): Promise<IntegrationStatus> {
   return get("/api/integrations/status");
+}
+
+/** General-search entry point: extract intent from free text and search
+ * Google Places for real matching businesses in one call. */
+export function discoverBusiness(query: string): Promise<DiscoverResult> {
+  return post("/api/business/discover", { query }, 20_000);
 }
 
 /** The main "Find My Creators" action -- runs the full discovery workflow

@@ -59,8 +59,63 @@ def _get(path: str, params: dict) -> Optional[dict]:
     return data
 
 
+def _city_state_from_formatted_address(formatted_address: str) -> str:
+    """Google's formatted_address is typically "STREET, CITY, STATE ZIP,
+    COUNTRY" -- reduce that to a plain "City, ST" string matching the
+    format the rest of the app (and scoring's city-adjacency logic)
+    expects, rather than accidentally treating the street address as the
+    "city" (which naive comma-splitting would do)."""
+    if not formatted_address:
+        return ""
+    parts = [p.strip() for p in formatted_address.split(",") if p.strip()]
+    if parts and parts[-1].upper() in ("USA", "UNITED STATES", "US"):
+        parts = parts[:-1]
+    if len(parts) < 2:
+        return formatted_address
+    city = parts[-2]
+    state = (parts[-1].split() or [parts[-1]])[0]
+    return f"{city}, {state}"
+
+
+def get_place_details(place_id: str) -> Optional[dict]:
+    """Fetch full details for an ALREADY-KNOWN place_id (e.g. one the user
+    explicitly picked from a disambiguation list) -- skips the fuzzy
+    find-by-text step entirely, so it can't drift to a different business
+    than the one actually selected."""
+    details_result = _get("details", {
+        "place_id": place_id,
+        "fields": "name,formatted_address,geometry,rating,user_ratings_total,"
+                   "website,business_status,opening_hours,types",
+    })
+    details = (details_result or {}).get("result", {})
+    if not details:
+        return None
+
+    location_data = (details.get("geometry") or {}).get("location", {})
+    formatted_address = details.get("formatted_address", "")
+
+    return {
+        "google_place_id": place_id,
+        "google_verified": True,
+        "business_name": details.get("name"),
+        "formatted_address": formatted_address,
+        "location": _city_state_from_formatted_address(formatted_address),
+        "latitude": location_data.get("lat"),
+        "longitude": location_data.get("lng"),
+        "google_rating": details.get("rating"),
+        "google_review_count": details.get("user_ratings_total"),
+        "has_website": bool(details.get("website")),
+        "business_status": details.get("business_status", "OPERATIONAL"),
+        "has_hours_listed": "opening_hours" in details,
+        "google_types": details.get("types", []),
+    }
+
+
 def lookup_business(business_name: str, location: str, business_type: str = "") -> Optional[dict]:
-    """Find and validate a business's real Google Places listing.
+    """Find and validate a business's real Google Places listing by fuzzy
+    name/type/location match (single best guess -- use search_businesses
+    instead when the caller needs to disambiguate between multiple
+    same-named results rather than silently picking the top one).
 
     Returns None if Places isn't configured, the business can't be found,
     or any request fails -- callers should treat this as "no real data
@@ -70,37 +125,47 @@ def lookup_business(business_name: str, location: str, business_type: str = "") 
     find_result = _get("findplacefromtext", {
         "input": query,
         "inputtype": "textquery",
-        "fields": "place_id,name,formatted_address,geometry",
+        "fields": "place_id",
     })
     if not find_result or not find_result.get("candidates"):
         return None
 
-    candidate = find_result["candidates"][0]
-    place_id = candidate.get("place_id")
+    place_id = find_result["candidates"][0].get("place_id")
     if not place_id:
         return None
 
-    details_result = _get("details", {
-        "place_id": place_id,
-        "fields": "name,formatted_address,geometry,rating,user_ratings_total,"
-                   "website,business_status,opening_hours",
-    })
-    details = (details_result or {}).get("result", {})
+    return get_place_details(place_id)
 
-    location_data = (details.get("geometry") or candidate.get("geometry", {})).get("location", {})
 
-    return {
-        "google_place_id": place_id,
-        "google_verified": True,
-        "formatted_address": details.get("formatted_address") or candidate.get("formatted_address"),
-        "latitude": location_data.get("lat"),
-        "longitude": location_data.get("lng"),
-        "google_rating": details.get("rating"),
-        "google_review_count": details.get("user_ratings_total"),
-        "has_website": bool(details.get("website")),
-        "business_status": details.get("business_status", "OPERATIONAL"),
-        "has_hours_listed": "opening_hours" in details,
-    }
+def search_businesses(query: str, location_hint: str = "", max_results: int = 5) -> list[dict]:
+    """Search for businesses matching a free-text query, returning
+    MULTIPLE candidates (unlike lookup_business's single best guess) --
+    used to disambiguate when a business name isn't unique, e.g. multiple
+    real locations of the same chain/franchise.
+
+    Returns [] if Places isn't configured or the search fails/finds
+    nothing.
+    """
+    full_query = f"{query} {location_hint}".strip()
+    result = _get("textsearch", {"query": full_query})
+    if not result:
+        return []
+
+    candidates = []
+    for place in result.get("results", [])[:max_results]:
+        location_data = (place.get("geometry") or {}).get("location", {})
+        candidates.append({
+            "place_id": place.get("place_id"),
+            "name": place.get("name"),
+            "formatted_address": place.get("formatted_address"),
+            "rating": place.get("rating"),
+            "user_ratings_total": place.get("user_ratings_total"),
+            "business_status": place.get("business_status", "OPERATIONAL"),
+            "latitude": location_data.get("lat"),
+            "longitude": location_data.get("lng"),
+            "types": place.get("types", []),
+        })
+    return candidates
 
 
 def nearby_places(

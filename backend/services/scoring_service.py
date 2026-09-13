@@ -69,7 +69,12 @@ def locality_score(business: dict, creator: dict) -> float:
     else:
         proximity = 2.0
 
-    local_pct = creator.get("audience_local_percentage", 0) or 0
+    # None means genuinely unknown (e.g. a web-search-discovered creator,
+    # where this isn't public data) -- treat that as a neutral assumption
+    # rather than confirmed 0%, which would unfairly tank real creators
+    # for data the mock dataset simply fabricates.
+    local_pct = creator.get("audience_local_percentage")
+    local_pct = 50.0 if local_pct is None else local_pct
     local_pct_contribution = min(local_pct, 100) / 100 * 10.0
 
     return round(min(proximity + local_pct_contribution, 30.0), 1)
@@ -82,6 +87,9 @@ def audience_score(business: dict, creator: dict) -> float:
     biz_hi = business.get("target_age_max")
     if biz_lo is None or biz_hi is None or biz_hi <= biz_lo:
         return 12.5  # neutral default when the business gave no usable range
+
+    if not creator.get("audience_age_range"):
+        return 12.5  # unknown (not fabricated), not confirmed mismatch -- same neutral default
 
     cre_lo, cre_hi = _parse_age_range(creator.get("audience_age_range", ""))
     if cre_hi <= cre_lo:
@@ -124,7 +132,11 @@ def engagement_score(creator: dict) -> float:
     12% ceiling (rather than follower-count-driven benchmarks) keeps the
     score meaningful without over-rewarding outliers.
     """
-    rate = creator.get("engagement_rate", 0) or 0
+    # None means unknown (not public data for a web-discovered creator),
+    # not confirmed zero -- assume an average ~5% rather than penalizing
+    # a real creator for data the mock dataset simply fabricates.
+    rate = creator.get("engagement_rate")
+    rate = 5.0 if rate is None else rate
     ceiling = 12.0
     return round(min(rate, ceiling) / ceiling * 15.0, 1)
 

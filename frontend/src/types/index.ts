@@ -6,6 +6,32 @@ export interface BusinessInput {
   target_audience: string;
   goal: string;
   budget: number;
+  place_id?: string | null;
+}
+
+export interface PlaceCandidate {
+  place_id: string;
+  name: string;
+  formatted_address: string;
+  rating?: number;
+  user_ratings_total?: number;
+  business_status: string;
+  latitude?: number;
+  longitude?: number;
+  types: string[];
+}
+
+export interface ExtractedIntent {
+  business_name: string;
+  location_hint: string;
+  goal: string;
+  target_audience: string;
+}
+
+export interface DiscoverResult {
+  extracted: ExtractedIntent;
+  status: "found_one" | "found_multiple" | "not_found" | "not_configured";
+  candidates: PlaceCandidate[];
 }
 
 export interface AnalyzedBusiness {

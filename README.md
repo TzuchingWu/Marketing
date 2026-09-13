@@ -7,9 +7,9 @@ biggest influencer, OUTTHERE finds the *right* local content creator for
 your business — ranked by fit, not follower count — and turns that into a
 ready-to-run campaign.
 
-> This README covers the **backend** in depth. A React/Vite frontend
-> exists in `frontend/` but is not yet wired up to this backend (still
-> using mock data) — that connection is the next piece of work.
+> This README covers the **backend** in depth. A React/Vite frontend in
+> `frontend/` is wired up to it end-to-end (real API calls, not mock
+> data) — see the Frontend section under "Running it".
 
 ## Problem
 
@@ -36,7 +36,7 @@ business logic lives**, and the FastAPI layer is a thin client of it.
                     USER
                      │
                      ▼
-           FRONTEND (frontend/, not yet wired up)
+                FRONTEND (frontend/)
                      │
                      ▼
               FastAPI (backend/main.py)
@@ -69,13 +69,17 @@ All in `backend/mcp/tools/`, registered by `backend/mcp/server.py`:
 
 | Tool | Purpose |
 |---|---|
-| `analyze_business` | Turn raw business input into structured category/audience/goal data. Deterministic (keyword-rule based), not LLM-based, so it never breaks or drifts. Optionally validates the business on Google Places (see below). |
-| `search_creators` | Find candidate creators by category/location. Auto-widens the search if too few match, so it never dead-ends. |
+| `discover_business_from_text` *(optional/bonus)* | "General search" entry point: extracts a business name + goal/audience from free text (e.g. "I am Ace Karaoke, target a younger audience") and searches Google Places for real matches in one call. See below. |
+| `find_real_business` *(optional/bonus)* | Search Google Places for businesses matching a name, for disambiguation when a name isn't unique (a chain with multiple real locations). |
+| `analyze_business` | Turn raw business input into structured category/audience/goal data. Deterministic (keyword-rule based), not LLM-based, so it never breaks or drifts. Optionally validates the business on Google Places, either by fuzzy name match or an exact `place_id` from `find_real_business`. |
+| `search_creators` | Find candidate creators by category/location from the demo dataset. Auto-widens the search if too few match, so it never dead-ends. |
 | `analyze_creator` | Deterministic 0–100 Creator Fit Score for one creator vs. one business, with a 5-part breakdown, strengths/weaknesses, and an LLM (or template) explanation. |
 | `rank_creators` | Score + sort a list of candidate creators, best fit first. |
+| `search_real_creators` *(optional/bonus)* | Search the live web (OpenAI web search) for REAL, currently-active creators instead of the demo dataset, then score and rank them the same way. See below. |
 | `generate_outreach` | Personalized outreach DM draft for a business to send to a creator. Never sends anything automatically. |
 | `generate_campaign` | Full campaign plan (name, strategy, content ideas, offer, budget allocation, expected reach) from a ranked creator shortlist. |
-| `generate_video_script` *(optional/bonus)* | Turns one campaign content idea into a shot-by-shot short-form video script (scenes, timing, on-screen text, caption, hashtags, CTA) — free, instant, no video file produced. See below. |
+| `generate_video_script` *(optional/bonus)* | Turns one campaign content idea into a shot-by-shot short-form video script (scenes, timing, on-screen text, caption, hashtags, CTA) — free, instant, no video file produced. |
+| `generate_video_ad` *(optional/bonus)* | Builds a marketing angle + video prompt grounded in real Places signals, then generates an actual short AI video clip via Google Veo. Slow async job, real cost — explicitly opt-in, never called automatically. See below. |
 | `analyze_online_presence` *(optional/bonus)* | Google/social/consistency visibility scoring, real when the business was Places-verified, simulated otherwise (`data_source` says which) — plus real nearby competitors when coordinates are available. |
 | `log_creator_outreach` *(optional/bonus)* | Logs an outreach attempt as a HubSpot CRM contact + note, once the owner has actually decided to send it. Never sends anything itself — see below. |
 
@@ -135,11 +139,13 @@ Agent Activity" UI, e.g.:
 
 ## Data
 
-`backend/data/creators.json` — 27 fictional creator profiles across food,
-coffee, fashion, beauty, fitness, gaming, tech, and travel, spread across
-Arcadia, Monrovia, Pasadena, San Gabriel, Alhambra, Temple City, Rosemead,
-El Monte, Glendale, and Los Angeles. **Clearly labeled as demo/simulated
-data** (see the `_note` field) — these are not real people or accounts.
+`backend/data/creators.json` — 29 fictional creator profiles across food,
+coffee, fashion, beauty, fitness, gaming, tech, travel, and nightlife,
+spread across Arcadia, Monrovia, Pasadena, San Gabriel, Alhambra, Temple
+City, Rosemead, El Monte, Glendale, City of Industry, and Los Angeles.
+**Clearly labeled as demo/simulated data** (see the `_note` field) —
+these are not real people or accounts. For real creators instead of this
+dataset, see `search_real_creators` below.
 
 Access goes through `backend/data/creator_provider.py`, an abstract
 `CreatorProvider` interface. Swapping in a real creator-discovery API
@@ -200,7 +206,7 @@ Without the token (or if the HubSpot API call fails for any reason),
 rather than raising or crashing anything — see
 `tests/test_hubspot_integration.py`.
 
-## Video script generation (free/instant) + real video (planned, opt-in)
+## Video script generation (free/instant) + real video ads (Veo, opt-in)
 
 `generate_video_script` turns one of `generate_campaign`'s `content_ideas`
 into an actual shot-by-shot script: timed scenes, what to film, on-screen
@@ -211,13 +217,79 @@ in `marketing_service.py`), so it always returns a complete, usable
 script even with no API key configured. No new env var needed — reuses
 `ANTHROPIC_API_KEY`. No video file is produced by this tool.
 
-A separate, explicitly opt-in tool to generate an actual video clip via
-a real video-generation provider (e.g. Runway, Luma, Veo) is planned but
-not yet built — video generation is an async job (30s–minutes, real
-per-clip cost, no free tier), a fundamentally different reliability
-profile than every synchronous tool above, so it's being kept as a
-clearly separate, user-triggered feature rather than baked into the core
-campaign flow.
+`generate_video_ad` goes further: it builds a specific marketing angle
+and a single dense text-to-video prompt (grounded in real Places signals
+like rating/review count when available, via `generate_ad_concept` in
+`marketing_service.py`), then sends that prompt to **Google Veo**
+(`backend/services/veo_service.py`) to actually generate a short vertical
+video clip. This is a genuinely different reliability profile than every
+other tool here: it's an async job (submit → poll → done, 30s–a few
+minutes) with real per-clip cost and no free tier, so it's kept
+explicitly opt-in — the agent is instructed to never call it
+automatically as part of the normal recommend flow. Without
+`GOOGLE_VEO_API_KEY` (or if generation fails/times out), the concept and
+prompt are still returned — only `video.status` reflects whether an
+actual clip was produced (`"ready"`, `"not_configured"`, `"failed"`, or
+`"timed_out"`), so the concept alone is still useful.
+
+Uses the Gemini API's `web_search`-style long-running-operation endpoint
+with simple API-key auth (not Vertex AI's OAuth/service-account path).
+Run `GET https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_KEY`
+to see which Veo models your key actually has access to.
+
+## General search: real business discovery (optional, Google Places)
+
+Instead of filling out a structured form, a user can type free text like
+*"I am Ace Karaoke, I want to target a younger audience"*. `discover_business_from_text`
+handles this in one call:
+
+1. `extract_business_intent` (in `marketing_service.py`) pulls a business
+   name, location hint, goal, and target audience out of the free text —
+   LLM-assisted with a regex fallback (`_fallback_extract_intent`) so it
+   always returns something searchable even offline.
+2. `places_service.search_businesses` runs a Google Places Text Search
+   for that name, returning **multiple** real candidates rather than
+   silently picking one — e.g. searching "Ace Karaoke" genuinely returns
+   two different real locations (San Gabriel and City of Industry, CA).
+3. The response's `status` tells the caller what to do next:
+   `"found_one"` → proceed directly; `"found_multiple"` → show the
+   candidates and ask the user which real business they meant;
+   `"not_found"` / `"not_configured"` → fall back to the manual form.
+4. Once a specific business is confirmed, `analyze_business` accepts that
+   exact `place_id` and fetches its details directly (`get_place_details`)
+   — skipping fuzzy name matching entirely, so the analysis can't drift
+   to a different, similarly-named business than the one actually picked.
+   Its real address is parsed down to a clean `"City, ST"` string (not
+   the raw street address) so locality scoring works correctly.
+
+This is the same Google Places integration described above — no new key
+needed, just a different (multi-result, disambiguating) way of using it.
+
+## Real creator discovery via web search (optional, OpenAI)
+
+`search_real_creators` searches the live web (via OpenAI's Responses API
+`web_search` tool, in `backend/services/web_search_service.py`) for
+real, currently-active creators instead of the demo dataset, then scores
+and ranks them with the same deterministic Creator Fit Score.
+
+**Important honesty constraint:** web search can reliably verify a
+creator's platform, handle, name, bio, and (sometimes) an approximate
+follower count. It **cannot** reliably verify engagement rate, audience
+demographics, or collaboration cost — those aren't public web data,
+they're exactly what the demo dataset fabricates for realism. This tool
+never asks the model to guess those; they come back `null`, and
+`scoring_service.py` treats unknown fields as a *neutral* assumption
+(e.g. ~5% engagement) rather than *confirmed zero*, so a real creator
+isn't unfairly crushed in scoring just for having unverifiable data.
+Every result is tagged `"source": "web_search"` and `"verified"`
+(whether a source URL was actually found).
+
+Requires `OPEN_AI_WEBSEARCH_API_KEY` — note this needs **billing enabled**
+on the OpenAI platform account (`platform.openai.com/settings/organization/billing`);
+like Veo, there's no free tier and `insufficient_quota` errors happen on
+the very first call otherwise. Without the key, or if search finds
+nothing, this returns `[]` and callers should fall back to
+`search_creators`.
 
 ## Running it
 
@@ -248,9 +320,13 @@ python -m backend.mcp.server
 
 ```text
 GET  /api/health
+GET  /api/integrations/status    real configured/not-configured status per integration
 POST /api/agent/recommend        full workflow, real MCP round trip, returns activity_log
+POST /api/business/discover      general search: free text -> extracted intent + real Places candidates
+POST /api/business/find-real     search Google Places by name for disambiguation
 POST /api/business/analyze
 POST /api/creators/search
+POST /api/creators/search-real   real creators via OpenAI web search, scored and ranked
 POST /api/creators/rank
 POST /api/outreach/generate
 POST /api/campaign/generate
@@ -268,9 +344,12 @@ npm install
 npm run dev
 ```
 
-Currently reads from `frontend/src/data/mockData.ts` rather than this
-backend -- wiring it up to the REST endpoints above is the next piece
-of work.
+Points at `http://127.0.0.1:8000` by default (`VITE_API_BASE_URL` to
+override) and drives the real backend end-to-end: business input (a
+structured form, or free-text "general search" with real-business
+disambiguation) → ranked creator cards with score breakdowns → outreach
+generation/CRM logging → video script/ad generation. The Agent Activity
+and Integrations pages show real backend state, not demo toggles.
 
 ## Tests
 
@@ -278,19 +357,25 @@ of work.
 pytest tests/ -v
 ```
 
-39 tests covering: score bounds (0–100), determinism, locality/audience/
-budget scoring direction, zero-overlap content relevance, empty search
-results (auto-widening), ranking determinism and ordering, unknown
-business/creator lookups, outreach personalization (and no duplicate
-fallback text), business-input edge cases, campaign budget compliance,
-video script generation (fallback shape/timing, category-specific
-templates, LLM parsing, graceful handling of malformed LLM output),
-Places integration (real-data merge, graceful fallback with no key
-or on lookup failure, real vs. simulated presence scoring), and HubSpot
-integration (contact find-or-create, note attachment, graceful
-degradation on missing token/API/unexpected failure) — the Places and
-HubSpot tests monkeypatch their respective service modules directly, so
-no real network calls or API keys are needed to run the suite.
+72 tests covering: score bounds (0–100), determinism, locality/audience/
+budget scoring direction (including neutral-not-zero handling for
+unknown fields, e.g. web-search-discovered creators), zero-overlap
+content relevance, empty search results (auto-widening), ranking
+determinism and ordering, unknown business/creator lookups, outreach
+personalization (and no duplicate fallback text), business-input edge
+cases, campaign budget compliance, video script generation (fallback
+shape/timing, category-specific templates, LLM parsing, graceful
+handling of malformed LLM output), Places integration (real-data merge,
+multi-result search disambiguation, address-to-city parsing, graceful
+fallback with no key or on lookup failure, real vs. simulated presence
+scoring), general-search intent extraction (LLM + regex fallback),
+HubSpot integration (contact find-or-create, note attachment, graceful
+degradation on missing token/API/unexpected failure), Veo video
+generation (submit/poll/ready/timeout/error paths), and web-search
+creator discovery (JSON/markdown-fence parsing, missing-handle
+filtering, max-results, never-raises) — all of these monkeypatch their
+respective service modules directly, so no real network calls or API
+keys are needed to run the suite.
 
 ## Demo reliability
 
@@ -303,11 +388,14 @@ no real network calls or API keys are needed to run the suite.
   requests (see `client_manager.py`), so in-memory business state stays
   consistent without needing a database.
 
-## Not built yet (frontend, P1/P2)
+## Not built yet (P2 / nice-to-have)
 
-- Frontend UI (landing form, agent activity panel, creator cards,
-  outreach/campaign views).
 - Creator comparison, budget optimization UI, campaign regeneration
   prompts, export-to-file.
-- A real creator-discovery API behind `CreatorProvider` (currently mock
-  data only, by design for the hackathon demo).
+- Wiring `search_real_creators`'s web-search results into the default
+  `CreatorProvider` path (currently a separate opt-in tool/endpoint,
+  rather than swapped in as the default data source).
+- Frontend automated tests (the old Hydra-flow test file was removed
+  when the frontend was rebuilt for OUTTHERE's actual domain; backend
+  coverage is thorough, frontend coverage currently relies on manual
+  and live-browser verification).
