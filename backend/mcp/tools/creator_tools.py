@@ -80,8 +80,15 @@ def register(mcp) -> None:
         if not results:
             return []
 
+        # Only the top handful ever get shown to the user (generate_campaign
+        # and the UI both only use the first ~5) -- generating an LLM
+        # explanation for every candidate just adds latency for sentences
+        # nobody reads. `results` is already sorted best-first.
+        max_llm_explanations = 5
         provider = get_provider()
-        for result in results:
+        for i, result in enumerate(results):
             creator = provider.get_creator(result["creator_id"])
-            result["explanation"] = marketing_service.explain_creator_fit(business, creator, result)
+            result["explanation"] = marketing_service.explain_creator_fit(
+                business, creator, result, use_llm=i < max_llm_explanations
+            )
         return results

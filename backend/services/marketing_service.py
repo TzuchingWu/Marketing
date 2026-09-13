@@ -136,16 +136,20 @@ def analyze_business(business_input: dict) -> dict:
     return result
 
 
-def explain_creator_fit(business: dict, creator: dict, score_result: dict) -> str:
+def explain_creator_fit(business: dict, creator: dict, score_result: dict, use_llm: bool = True) -> str:
     """One or two sentence explanation of why a creator fits (or doesn't).
     Tries the LLM first, falls back to a templated sentence built from the
-    deterministic strengths list."""
+    deterministic strengths list. `use_llm=False` skips straight to the
+    template -- used for lower-ranked candidates where an LLM call would
+    just add latency for an explanation nobody will read."""
     strengths = score_result.get("strengths", [])
     fallback = (
         f"{creator.get('handle')} scored {score_result.get('fit_score')}/100 for "
         f"{business.get('business_name', 'this business')}. "
         + (f"Key reasons: {', '.join(strengths[:3])}." if strengths else "")
     )
+    if not use_llm:
+        return fallback
 
     prompt = (
         f"Business: {business.get('business_name')} ({business.get('business_category')}) "
@@ -251,13 +255,18 @@ def generate_campaign(business: dict, creators: list[dict], budget: int, goal: s
         f"Goal: {goal}. Budget: ${budget}.\n"
         f"Selected creators: {[c.get('handle') for c in included]}.\n\n"
         "Suggest: (1) a catchy 3-5 word campaign name, (2) a 1-2 sentence strategy summary, "
-        "(3) exactly 3 short content ideas, (4) one simple promotional offer. "
-        "Respond in plain text with labeled sections: NAME:, STRATEGY:, IDEAS:, OFFER:."
+        "(3) exactly 3 short content ideas (one sentence each, under 20 words), (4) one simple "
+        "promotional offer (under 15 words). Respond in plain text with labeled sections IN THIS "
+        "EXACT ORDER: NAME:, STRATEGY:, OFFER:, IDEAS: (IDEAS last, since it's fine if the least "
+        "critical section runs out of room before the others do)."
     )
     text = llm_client.generate_text(
-        system_prompt="You are a marketing strategist creating simple, actionable small-business campaigns.",
+        system_prompt=(
+            "You are a marketing strategist creating simple, actionable small-business campaigns. "
+            "You are concise and always finish each section completely before moving to the next."
+        ),
         user_prompt=prompt,
-        max_tokens=350,
+        max_tokens=600,
     )
 
     campaign_name = _fallback_campaign_name(business.get("business_category", ""))
@@ -272,8 +281,8 @@ def generate_campaign(business: dict, creators: list[dict], budget: int, goal: s
     if text:
         name_match = re.search(r"NAME:\s*(.+)", text)
         strategy_match = re.search(r"STRATEGY:\s*(.+?)(?:\n[A-Z]+:|$)", text, re.DOTALL)
-        ideas_match = re.search(r"IDEAS:\s*(.+?)(?:\nOFFER:|$)", text, re.DOTALL)
-        offer_match = re.search(r"OFFER:\s*(.+)", text, re.DOTALL)
+        offer_match = re.search(r"OFFER:\s*(.+?)(?:\nIDEAS:|$)", text, re.DOTALL)
+        ideas_match = re.search(r"IDEAS:\s*(.+)$", text, re.DOTALL)
 
         if name_match:
             campaign_name = name_match.group(1).strip().strip('"')

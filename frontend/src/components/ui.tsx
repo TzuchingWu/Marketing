@@ -1,35 +1,26 @@
 import {
-  ArrowUpRight,
   ArrowRight,
   Search,
   Activity,
   Leaf,
   Timer,
-  Users,
   Check,
   X,
+  MapPin,
+  Target,
+  MessageCircle,
+  DollarSign,
+  Users,
+  Loader2,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  CartesianGrid,
-} from "recharts";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { Opportunity, AgentActivity } from "../types";
-import { trendHistory } from "../data/mockData";
-export function Badge({
-  children,
-  tone = "green",
-}: {
-  children: ReactNode;
-  tone?: string;
-}) {
+import type { AgentActivityItem, CreatorMatch, ScoreBreakdown } from "../types";
+
+export function Badge({ children, tone = "green" }: { children: ReactNode; tone?: string }) {
   return <span className={`badge ${tone}`}>{children}</span>;
 }
+
 export function SectionTitle({
   eyebrow,
   title,
@@ -49,6 +40,7 @@ export function SectionTitle({
     </div>
   );
 }
+
 export function Metric({
   label,
   value,
@@ -71,148 +63,142 @@ export function Metric({
     </div>
   );
 }
-export function OpportunityArt({ opportunity }: { opportunity: Opportunity }) {
+
+const SCORE_BREAKDOWN_LABELS: { key: keyof ScoreBreakdown; label: string; max: number }[] = [
+  { key: "locality", label: "Locality", max: 30 },
+  { key: "audience_match", label: "Audience Match", max: 25 },
+  { key: "content_relevance", label: "Content Relevance", max: 20 },
+  { key: "engagement", label: "Engagement", max: 15 },
+  { key: "budget_fit", label: "Budget Fit", max: 10 },
+];
+
+export function ScoreBreakdownBars({ breakdown }: { breakdown: ScoreBreakdown }) {
   return (
-    <div className={`opportunity-art ${opportunity.color}`}>
-      <span className="art-kicker">HYDRA / EVERYDAY RITUALS</span>
-      <div className="art-orbit orbit-one" />
-      <div className="art-orbit orbit-two" />
-      <span className="art-word">
-        {opportunity.id === "sunday"
-          ? "reset."
-          : opportunity.id === "run"
-            ? "together."
-            : "begin."}
-      </span>
-      <div className="product-packet">
-        <Leaf size={16} />
-        <strong>hydra</strong>
-        <span>
-          ELECTROLYTE
-          <br />
-          DRINK MIX
-        </span>
-        <div className="packet-line" />
-        <small>LIME + SEA SALT</small>
-      </div>
-      <span className="art-bottom">A little ritual. A better you.</span>
-      <span className="art-icon">
-        {opportunity.id === "run" ? <Users /> : <Leaf />}
-      </span>
+    <div className="detail-metrics">
+      {SCORE_BREAKDOWN_LABELS.map(({ key, label, max }) => (
+        <div className="metric" key={key}>
+          <span>{label}</span>
+          <strong>
+            {breakdown[key]}
+            <small style={{ fontSize: 12, fontWeight: 400 }}> / {max}</small>
+          </strong>
+          <div className="fit-bar">
+            <span style={{ width: `${Math.min(100, (breakdown[key] / max) * 100)}%` }} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
-export function OpportunityCard({
-  opportunity: o,
+
+export function CreatorCard({
+  creator: c,
+  rank,
   onView,
-  onBuild,
-  onDismiss,
-  compact = false,
+  onOutreach,
 }: {
-  opportunity: Opportunity;
+  creator: CreatorMatch;
+  rank?: number;
   onView: () => void;
-  onBuild?: () => void;
-  onDismiss?: () => void;
-  compact?: boolean;
+  onOutreach: () => void;
 }) {
   return (
-    <article className={`opportunity-card ${compact ? "compact-opportunity" : ""}`}>
-      <OpportunityArt opportunity={o} />
-      <div className="opportunity-content">
+    <article className="opportunity-card">
+      <div className="opportunity-content" style={{ padding: rank ? "21px 21px 21px" : undefined }}>
         <div className="flex justify-between items-center">
-          <Badge>
+          <Badge tone={c.fit_score >= 85 ? "green" : c.fit_score >= 70 ? "amber" : "neutral"}>
             <span className="dot" />
-            {o.stage}
+            {c.recommendation}
           </Badge>
           <span className="score">
-            {o.score}
-            <small> / 100 opportunity score</small>
+            {c.fit_score}
+            <small> / 100 fit score</small>
           </span>
         </div>
-        <h3>{o.name}</h3>
+        <h3>
+          {rank ? `#${rank} ` : ""}
+          {c.handle}
+        </h3>
         <div className="card-stats">
           <span>
-            <ArrowUpRight size={15} />
-            <b>+{o.growth}%</b> growth
+            <Users size={13} />
+            <b>{c.followers.toLocaleString()}</b> followers
           </span>
           <span>
-            <b>{o.match}%</b> audience match
+            <b>{c.engagement_rate}%</b> engagement
+          </span>
+          <span>
+            <DollarSign size={13} />
+            <b>${c.estimated_collaboration_cost}</b> est.
           </span>
         </div>
-        <p>{o.id === 'sunday' ? 'Growing Sunday Reset routines give Hydra a natural place in its younger audience’s wellness content.' : o.id === 'run' ? 'Post-run hydration connects Hydra with active professionals through creator-led running communities.' : o.reasoning.split(/(?<=[.!?])\s+/)[0]}</p>
-        {!compact && <div className="tags"><span>{o.platform}</span><span>{o.format}</span></div>}
-        {onBuild && (
-          <div className="card-extra">
-            <span>{o.audience}</span>
-            <span>
-              {o.relevance}% brand relevance · {o.product}
-            </span>
-          </div>
-        )}
+        <p>{c.bio}</p>
+        <div className="tags">
+          <span>{c.platform}</span>
+          <span>{c.location}</span>
+          {c.categories.slice(0, 2).map((cat) => (
+            <span key={cat}>{cat}</span>
+          ))}
+        </div>
         <button className="card-link" onClick={onView}>
-          View Opportunity
+          View Creator
           <ArrowRight size={16} />
         </button>
-        {onBuild && (
-          <div className="flex gap-2 mt-3">
-            <button className="btn primary compact" onClick={onBuild}>
-              Build Campaign
-            </button>
-            {onDismiss && <button className="btn compact" onClick={onDismiss}>Dismiss</button>}
-          </div>
-        )}
+        <div className="flex gap-2 mt-3">
+          <button className="btn primary compact" onClick={onOutreach}>
+            <MessageCircle size={14} />
+            Generate Outreach
+          </button>
+        </div>
       </div>
     </article>
   );
 }
-export function TrendChart({ compact = false }: { compact?: boolean }) {
+
+export function AgentProgress({ done }: { done: boolean }) {
+  const steps = [
+    "Understanding your business",
+    "Finding relevant creators",
+    "Scoring creator fit",
+    "Building your campaign",
+  ];
+  const [activeStep, setActiveStep] = useState(0);
+  useEffect(() => {
+    if (done) {
+      setActiveStep(steps.length);
+      return;
+    }
+    const interval = setInterval(() => {
+      setActiveStep((s) => Math.min(s + 1, steps.length - 1));
+    }, 1400);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done]);
   return (
-    <div className={compact ? "chart compact-chart" : "chart"}>
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart
-          data={trendHistory}
-          margin={{ top: 10, right: 5, left: 0, bottom: 0 }}
-        >
-          <defs>
-            <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#41866b" stopOpacity={0.24} />
-              <stop offset="100%" stopColor="#41866b" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid vertical={false} stroke="#ebeee9" />
-          <XAxis
-            dataKey="day"
-            tickLine={false}
-            axisLine={false}
-            minTickGap={45}
-            tick={{ fontSize: 11, fill: "#89928a" }}
-          />
-          <Tooltip
-            contentStyle={{
-              borderRadius: 8,
-              border: "1px solid #e1e5de",
-              fontSize: 12,
-            }}
-          />
-          <Area
-            name="Relative interest"
-            type="monotone"
-            dataKey="interest"
-            stroke="#34785b"
-            strokeWidth={2.5}
-            fill="url(#trendFill)"
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+    <div className="agent-response" aria-live="polite" aria-atomic="true">
+      {steps.map((label, i) => (
+        <div className="response-status" key={label}>
+          {i < activeStep ? (
+            <Check size={14} />
+          ) : i === activeStep ? (
+            <Loader2 size={14} className="working-icon" />
+          ) : (
+            <span style={{ width: 14, display: "inline-block" }} />
+          )}
+          {label}
+          {i < activeStep ? "..." : i === activeStep ? "..." : ""}
+        </div>
+      ))}
     </div>
   );
 }
+
 export function ActivityFeed({
   items,
   short = false,
   showDescriptions = false,
 }: {
-  items: AgentActivity[];
+  items: AgentActivityItem[];
   short?: boolean;
   showDescriptions?: boolean;
 }) {
@@ -226,7 +212,7 @@ export function ActivityFeed({
             ) : a.category === "Action" ? (
               <Check size={15} />
             ) : a.category === "Decision" ? (
-              <Leaf size={15} />
+              <Target size={15} />
             ) : (
               <Activity size={15} />
             )}
@@ -244,6 +230,7 @@ export function ActivityFeed({
     </div>
   );
 }
+
 export function EmptyState({
   title,
   description,
@@ -262,6 +249,18 @@ export function EmptyState({
     </div>
   );
 }
+
+export function LocationTag({ location }: { location: string }) {
+  return (
+    <span className="tags" style={{ display: "inline-flex" }}>
+      <span>
+        <MapPin size={11} style={{ marginRight: 4, verticalAlign: -1 }} />
+        {location}
+      </span>
+    </span>
+  );
+}
+
 export function Modal({
   title,
   onClose,
@@ -288,11 +287,7 @@ export function Modal({
         if (!elements?.length) return;
         const first = elements[0],
           last = elements[elements.length - 1];
-        if (
-          e.shiftKey &&
-          (document.activeElement === first ||
-            document.activeElement === ref.current)
-        ) {
+        if (e.shiftKey && (document.activeElement === first || document.activeElement === ref.current)) {
           e.preventDefault();
           last.focus();
         } else if (!e.shiftKey && document.activeElement === last) {
@@ -315,24 +310,13 @@ export function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div
-        ref={ref}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className={drawer ? "modal drawer" : "modal"}
-      >
+      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title} className={drawer ? "modal drawer" : "modal"}>
         <div className="modal-header">
           <h2>
-            <Search size={20} />
+            <Leaf size={20} />
             {title}
           </h2>
-          <button
-            className="icon-button"
-            aria-label="Close dialog"
-            onClick={onClose}
-          >
+          <button className="icon-button" aria-label="Close dialog" onClick={onClose}>
             <X size={20} />
           </button>
         </div>

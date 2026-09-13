@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from backend.mcp import client_manager
 from backend.mcp.agent_client import run_agent_workflow
+from backend.services import hubspot_service, llm_client, places_service, veo_service
 
 
 @asynccontextmanager
@@ -127,6 +128,19 @@ async def _call(name: str, args: dict):
 async def health():
     tools = await client_manager.list_tools()
     return {"status": "ok", "mcp_tools": [t.name for t in tools]}
+
+
+@app.get("/api/integrations/status")
+async def integrations_status():
+    """Real configured/not-configured status for each optional integration
+    -- never exposes key values, just whether one is set. The core product
+    (deterministic scoring, mock creator data) works with all of these off."""
+    return {
+        "anthropic": llm_client.is_available(),
+        "google_maps": places_service.is_configured(),
+        "hubspot": hubspot_service.is_configured(),
+        "veo": veo_service.is_configured(),
+    }
 
 
 # ---------------------------------------------------------------------------
