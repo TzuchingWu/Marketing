@@ -138,6 +138,7 @@ async def _run_agentic(business_input: dict, activity_log: list[dict]) -> dict:
     }]
 
     business_id = None
+    business_result = None
     ranked = None
     campaign = None
     candidates = []
@@ -162,8 +163,9 @@ async def _run_agentic(business_input: dict, activity_log: list[dict]) -> dict:
         for block in tool_uses:
             parsed = await _call(block.name, block.input, activity_log)
 
-            if block.name == "analyze_business":
+            if block.name == "analyze_business" and isinstance(parsed, dict):
                 business_id = parsed.get("business_id")
+                business_result = parsed
             elif block.name == "search_creators":
                 candidates = parsed if isinstance(parsed, list) else candidates
             elif block.name == "rank_creators":
@@ -190,7 +192,7 @@ async def _run_agentic(business_input: dict, activity_log: list[dict]) -> dict:
     top_creators = [{**provider_lookup.get(r["creator_id"], {}), **r} for r in ranked[:5]]
 
     return {
-        "business": {"business_id": business_id, **business_input},
+        "business": business_result or {"business_id": business_id, **business_input},
         "creators": top_creators,
         "campaign": campaign,
         "agent_summary": final_text or "Recommendation ready.",

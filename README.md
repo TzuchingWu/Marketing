@@ -68,13 +68,15 @@ All in `backend/mcp/tools/`, registered by `backend/mcp/server.py`:
 
 | Tool | Purpose |
 |---|---|
-| `analyze_business` | Turn raw business input into structured category/audience/goal data. Deterministic (keyword-rule based), not LLM-based, so it never breaks or drifts. |
+| `analyze_business` | Turn raw business input into structured category/audience/goal data. Deterministic (keyword-rule based), not LLM-based, so it never breaks or drifts. Optionally validates the business on Google Places (see below). |
 | `search_creators` | Find candidate creators by category/location. Auto-widens the search if too few match, so it never dead-ends. |
 | `analyze_creator` | Deterministic 0–100 Creator Fit Score for one creator vs. one business, with a 5-part breakdown, strengths/weaknesses, and an LLM (or template) explanation. |
 | `rank_creators` | Score + sort a list of candidate creators, best fit first. |
 | `generate_outreach` | Personalized outreach DM draft for a business to send to a creator. Never sends anything automatically. |
 | `generate_campaign` | Full campaign plan (name, strategy, content ideas, offer, budget allocation, expected reach) from a ranked creator shortlist. |
-| `analyze_online_presence` *(optional/bonus)* | Simulated visibility scoring (Google/social/consistency) to motivate why creator marketing helps. |
+| `generate_video_script` *(optional/bonus)* | Turns one campaign content idea into a shot-by-shot short-form video script (scenes, timing, on-screen text, caption, hashtags, CTA) — free, instant, no video file produced. See below. |
+| `analyze_online_presence` *(optional/bonus)* | Google/social/consistency visibility scoring, real when the business was Places-verified, simulated otherwise (`data_source` says which) — plus real nearby competitors when coordinates are available. |
+| `log_creator_outreach` *(optional/bonus)* | Logs an outreach attempt as a HubSpot CRM contact + note, once the owner has actually decided to send it. Never sends anything itself — see below. |
 
 Every tool has a docstring written for the calling LLM: what it does, when
 to use it, and what it returns (FastMCP turns these into the tool
@@ -143,6 +145,79 @@ Access goes through `backend/data/creator_provider.py`, an abstract
 later means writing one new class with the same two methods — no other
 code changes.
 
+## Google Places integration (optional, real-data enrichment)
+
+If `GOOGLE_MAPS_API_KEY` is set, `backend/services/places_service.py`
+validates the business against real Google Places data:
+
+- **`analyze_business`** looks the business up (Find Place + Details) and,
+  if found, merges in `google_verified`, `formatted_address`,
+  `latitude`/`longitude`, `google_rating`, `google_review_count`, and
+  `has_website`. Geocoding is a side effect of this lookup, not its
+  purpose — the resolved coordinates/address are just retained on the
+  business record for future local-creator and competitor discovery; they
+  do **not** change the deterministic city-based locality scoring in
+  `scoring_service.py`.
+- **`analyze_online_presence`** uses the real rating/review count/website
+  presence to compute `google_presence` when the business was verified,
+  and runs a real Nearby Search around its coordinates to list actual
+  `nearby_competitors`. The response always includes `data_source`
+  (`"real"` or `"simulated"`) so the UI/demo never misrepresents simulated
+  numbers as real — see the spec's "don't falsely represent" requirement.
+
+Without the key (or if the business can't be found on Places, or the API
+call fails for any reason), everything falls back to exactly the
+simulated/deterministic behavior this app had before Places existed —
+see `tests/test_places_integration.py`. Requires the legacy **Places
+API** to be enabled for your key in Google Cloud Console (Find Place,
+Details, and Nearby Search endpoints) — not just "Places API (New)".
+
+**Keeping the key safe:** put it only in `.env` (already `.gitignore`d,
+never `.env.example`), restrict it in Google Cloud Console to the Places
+API + your server's IP, and never let it reach frontend/browser code —
+a key embedded in client-side JS is visible to anyone via view-source.
+
+## HubSpot integration (optional, outreach tracking)
+
+If `HUBSPOT_ACCESS_TOKEN` is set, `backend/services/hubspot_service.py`
+logs outreach as CRM activity: `log_creator_outreach` finds-or-creates a
+HubSpot contact for the creator (keyed on their handle, since creators
+have no email address) and attaches a note with the offer + message that
+was sent. This is a **logging** step, not a sending step — it runs only
+after generate_outreach has already produced a message and the business
+owner has decided to actually use it, so many creators' outreach status
+can be tracked in one place (HubSpot) instead of disappearing once this
+session ends.
+
+Uses a HubSpot **Service Key / Private App access token** (a static
+Bearer token scoped to one account) — not OAuth, since this is a
+single-account integration rather than a multi-tenant app. Required
+scopes: `crm.objects.contacts.read`, `crm.objects.contacts.write`.
+
+Without the token (or if the HubSpot API call fails for any reason),
+`log_creator_outreach` returns `{"logged": false, "reason": "..."}`
+rather than raising or crashing anything — see
+`tests/test_hubspot_integration.py`.
+
+## Video script generation (free/instant) + real video (planned, opt-in)
+
+`generate_video_script` turns one of `generate_campaign`'s `content_ideas`
+into an actual shot-by-shot script: timed scenes, what to film, on-screen
+text, a caption, hashtags, and a CTA — something a business owner could
+film on a phone, or hand to a creator as a brief. It's LLM-assisted with
+a deterministic per-category template fallback (`_fallback_video_script`
+in `marketing_service.py`), so it always returns a complete, usable
+script even with no API key configured. No new env var needed — reuses
+`ANTHROPIC_API_KEY`. No video file is produced by this tool.
+
+A separate, explicitly opt-in tool to generate an actual video clip via
+a real video-generation provider (e.g. Runway, Luma, Veo) is planned but
+not yet built — video generation is an async job (30s–minutes, real
+per-clip cost, no free tier), a fundamentally different reliability
+profile than every synchronous tool above, so it's being kept as a
+clearly separate, user-triggered feature rather than baked into the core
+campaign flow.
+
 ## Running it
 
 ```bash
@@ -178,6 +253,9 @@ POST /api/creators/search
 POST /api/creators/rank
 POST /api/outreach/generate
 POST /api/campaign/generate
+POST /api/business/{business_id}/presence
+POST /api/outreach/log
+POST /api/video/script
 ```
 
 ## Tests
@@ -186,12 +264,19 @@ POST /api/campaign/generate
 pytest tests/ -v
 ```
 
-21 tests covering: score bounds (0–100), determinism, locality/audience/
+39 tests covering: score bounds (0–100), determinism, locality/audience/
 budget scoring direction, zero-overlap content relevance, empty search
 results (auto-widening), ranking determinism and ordering, unknown
 business/creator lookups, outreach personalization (and no duplicate
-fallback text), business-input edge cases, and campaign budget
-compliance.
+fallback text), business-input edge cases, campaign budget compliance,
+video script generation (fallback shape/timing, category-specific
+templates, LLM parsing, graceful handling of malformed LLM output),
+Places integration (real-data merge, graceful fallback with no key
+or on lookup failure, real vs. simulated presence scoring), and HubSpot
+integration (contact find-or-create, note attachment, graceful
+degradation on missing token/API/unexpected failure) — the Places and
+HubSpot tests monkeypatch their respective service modules directly, so
+no real network calls or API keys are needed to run the suite.
 
 ## Demo reliability
 

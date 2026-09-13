@@ -80,6 +80,30 @@ class OutreachRequest(BaseModel):
     tone: str = "friendly"
 
 
+class LogOutreachRequest(BaseModel):
+    creator_handle: str
+    creator_name: str = ""
+    platform: str = ""
+    business_name: str
+    offer: str
+    message: str
+
+
+class VideoScriptRequest(BaseModel):
+    business: dict
+    content_idea: str
+    platform: str = "TikTok / Instagram Reels"
+    duration_seconds: int = 30
+
+
+class VideoAdRequest(BaseModel):
+    business_id: str
+    offer: str
+    target_audience: str
+    style: str = "authentic, energetic, phone-shot"
+    duration_seconds: int = 8
+
+
 class CampaignRequest(BaseModel):
     business_id: str
     creator_ids: list[str]
@@ -148,3 +172,26 @@ async def generate_outreach(req: OutreachRequest):
 @app.post("/api/campaign/generate")
 async def generate_campaign(req: CampaignRequest):
     return await _call("generate_campaign", req.model_dump())
+
+
+@app.post("/api/business/{business_id}/presence")
+async def analyze_online_presence(business_id: str):
+    return await _call("analyze_online_presence", {"business_id": business_id})
+
+
+@app.post("/api/outreach/log")
+async def log_creator_outreach(req: LogOutreachRequest):
+    return await _call("log_creator_outreach", req.model_dump())
+
+
+@app.post("/api/video/script")
+async def generate_video_script(req: VideoScriptRequest):
+    return await _call("generate_video_script", req.model_dump())
+
+
+@app.post("/api/video/ad")
+async def generate_video_ad(req: VideoAdRequest):
+    # Video generation is a slow async job (can take minutes) -- this
+    # request will hang open for the duration rather than returning
+    # immediately like every other endpoint.
+    return await _call("generate_video_ad", req.model_dump())
