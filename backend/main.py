@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from backend.mcp import client_manager
 from backend.mcp.agent_client import run_agent_workflow
+from backend.services import hubspot_service, llm_client, places_service, veo_service, web_search_service
 
 
 @asynccontextmanager
@@ -59,6 +60,16 @@ class BusinessInput(BaseModel):
     target_audience: str = ""
     goal: str = ""
     budget: int = 0
+    place_id: str | None = None
+
+
+class DiscoverRequest(BaseModel):
+    query: str
+
+
+class FindBusinessRequest(BaseModel):
+    query: str
+    location_hint: str = ""
 
 
 class RankRequest(BaseModel):
@@ -78,6 +89,38 @@ class OutreachRequest(BaseModel):
     creator: dict
     offer: str
     tone: str = "friendly"
+
+
+class RealSearchRequest(BaseModel):
+    business_id: str
+    category: str
+    location: str
+    target_audience: str = ""
+    max_results: int = 5
+
+
+class LogOutreachRequest(BaseModel):
+    creator_handle: str
+    creator_name: str = ""
+    platform: str = ""
+    business_name: str
+    offer: str
+    message: str
+
+
+class VideoScriptRequest(BaseModel):
+    business: dict
+    content_idea: str
+    platform: str = "TikTok / Instagram Reels"
+    duration_seconds: int = 30
+
+
+class VideoAdRequest(BaseModel):
+    business_id: str
+    offer: str
+    target_audience: str
+    style: str = "authentic, energetic, phone-shot"
+    duration_seconds: int = 8
 
 
 class CampaignRequest(BaseModel):
@@ -105,6 +148,20 @@ async def health():
     return {"status": "ok", "mcp_tools": [t.name for t in tools]}
 
 
+@app.get("/api/integrations/status")
+async def integrations_status():
+    """Real configured/not-configured status for each optional integration
+    -- never exposes key values, just whether one is set. The core product
+    (deterministic scoring, mock creator data) works with all of these off."""
+    return {
+        "anthropic": llm_client.is_available(),
+        "google_maps": places_service.is_configured(),
+        "hubspot": hubspot_service.is_configured(),
+        "veo": veo_service.is_configured(),
+        "web_search": web_search_service.is_configured(),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main agent workflow -- the primary "Find My Creators" action. Runs the
 # full pipeline through the MCP server and returns an activity log of
@@ -130,6 +187,20 @@ async def analyze_business(business: BusinessInput):
     return await _call("analyze_business", {"business": business.model_dump()})
 
 
+@app.post("/api/business/discover")
+async def discover_business(req: DiscoverRequest):
+    """General-search entry point: extract intent from free text and
+    search Google Places for real matching businesses in one call. Returns
+    status found_one/found_multiple/not_found/not_configured -- the
+    frontend shows a disambiguation picker on found_multiple."""
+    return await _call("discover_business_from_text", {"free_text": req.query})
+
+
+@app.post("/api/business/find-real")
+async def find_real_business(req: FindBusinessRequest):
+    return await _call("find_real_business", req.model_dump())
+
+
 @app.post("/api/creators/search")
 async def search_creators(req: SearchRequest):
     return await _call("search_creators", req.model_dump())
@@ -140,6 +211,11 @@ async def rank_creators(req: RankRequest):
     return await _call("rank_creators", req.model_dump())
 
 
+@app.post("/api/creators/search-real")
+async def search_real_creators(req: RealSearchRequest):
+    return await _call("search_real_creators", req.model_dump())
+
+
 @app.post("/api/outreach/generate")
 async def generate_outreach(req: OutreachRequest):
     return await _call("generate_outreach", req.model_dump())
@@ -148,3 +224,26 @@ async def generate_outreach(req: OutreachRequest):
 @app.post("/api/campaign/generate")
 async def generate_campaign(req: CampaignRequest):
     return await _call("generate_campaign", req.model_dump())
+
+
+@app.post("/api/business/{business_id}/presence")
+async def analyze_online_presence(business_id: str):
+    return await _call("analyze_online_presence", {"business_id": business_id})
+
+
+@app.post("/api/outreach/log")
+async def log_creator_outreach(req: LogOutreachRequest):
+    return await _call("log_creator_outreach", req.model_dump())
+
+
+@app.post("/api/video/script")
+async def generate_video_script(req: VideoScriptRequest):
+    return await _call("generate_video_script", req.model_dump())
+
+
+@app.post("/api/video/ad")
+async def generate_video_ad(req: VideoAdRequest):
+    # Video generation is a slow async job (can take minutes) -- this
+    # request will hang open for the duration rather than returning
+    # immediately like every other endpoint.
+    return await _call("generate_video_ad", req.model_dump())

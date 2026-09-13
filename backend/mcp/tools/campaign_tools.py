@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-
 from pydantic import BaseModel, Field
 
 from backend.services import creator_service, marketing_service
@@ -97,40 +95,23 @@ def register(mcp) -> None:
         presence, social presence, content consistency) and suggest ways
         to improve it before or alongside a creator campaign.
 
-        This runs on simulated/demo signals derived from the business
-        profile, not a live web crawl -- it's meant to contextualize *why*
-        creator marketing helps, not to be a real SEO audit.
+        If analyze_business was able to validate this business on Google
+        Places, google_presence is derived from its real rating/review
+        count/website presence, and nearby_competitors lists real similar
+        businesses found on Google near it. Otherwise (no Google Maps API
+        key configured, or the business couldn't be found on Places),
+        every number here is a clearly-labeled simulated demo signal, not
+        a live web crawl -- either way this is meant to contextualize
+        *why* creator marketing helps, not to be a real SEO audit.
 
         Input: business_id (from analyze_business).
 
         Returns: google_presence, social_presence, content_consistency,
-        overall_visibility (all 0-100), and a list of recommendations.
+        overall_visibility (all 0-100), data_source ("real" or
+        "simulated"), nearby_competitors, and a list of recommendations.
         """
         business = get_business(business_id)
         if business is None:
             raise ValueError(f"Could not find business '{business_id}'. Call analyze_business first.")
 
-        # Deterministic pseudo-signal so repeated calls for the same
-        # business always return the same demo numbers.
-        seed = int(hashlib.sha256(business.get("business_name", "").encode()).hexdigest(), 16)
-        google_presence = 40 + (seed % 45)
-        social_presence = 30 + ((seed // 7) % 50)
-        content_consistency = 25 + ((seed // 13) % 55)
-        overall_visibility = round((google_presence + social_presence + content_consistency) / 3)
-
-        recommendations = []
-        if google_presence < 60:
-            recommendations.append("Claim and complete your Google Business Profile with current hours and photos")
-        if social_presence < 60:
-            recommendations.append("Post consistently on at least one platform your target audience actually uses")
-        if content_consistency < 60:
-            recommendations.append("Establish a regular posting cadence instead of sporadic updates")
-        recommendations.append("Partner with locally-relevant creators to reach audiences your own channels can't")
-
-        return {
-            "google_presence": google_presence,
-            "social_presence": social_presence,
-            "content_consistency": content_consistency,
-            "overall_visibility": overall_visibility,
-            "recommendations": recommendations,
-        }
+        return marketing_service.analyze_online_presence(business)

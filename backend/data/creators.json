@@ -432,6 +432,38 @@
       "audience_local_percentage": 25,
       "estimated_collaboration_cost": 280,
       "bio": "Day trips and hidden gems around Los Angeles County"
+    },
+    {
+      "id": "creator_028",
+      "handle": "@sgvnightlife",
+      "name": "SGV Nightlife",
+      "platform": "Instagram",
+      "location": "San Gabriel, CA",
+      "categories": ["nightlife", "entertainment", "local", "college"],
+      "followers": 9800,
+      "avg_likes": 720,
+      "avg_comments": 58,
+      "engagement_rate": 9.1,
+      "audience_age_range": "18-27",
+      "audience_local_percentage": 75,
+      "estimated_collaboration_cost": 90,
+      "bio": "Karaoke nights, bars, and after-dark spots around the SGV"
+    },
+    {
+      "id": "creator_029",
+      "handle": "@industryhangouts",
+      "name": "Industry Hangouts",
+      "platform": "TikTok",
+      "location": "City of Industry, CA",
+      "categories": ["nightlife", "entertainment", "local"],
+      "followers": 6200,
+      "avg_likes": 810,
+      "avg_comments": 66,
+      "engagement_rate": 12.4,
+      "audience_age_range": "18-26",
+      "audience_local_percentage": 68,
+      "estimated_collaboration_cost": 55,
+      "bio": "Karaoke, bowling, and weekend hangout spots near City of Industry"
     }
   ]
 }

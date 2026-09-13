@@ -30,7 +30,7 @@ _lock = asyncio.Lock()
 # return as one text content block PER ITEM (not one JSON array block), so
 # these must always be reassembled into a list even when there's 0 or 1
 # item, rather than inferring shape from the block count.
-LIST_RESULT_TOOLS = {"search_creators", "rank_creators"}
+LIST_RESULT_TOOLS = {"search_creators", "rank_creators", "search_real_creators"}
 
 
 def _server_params() -> StdioServerParameters:

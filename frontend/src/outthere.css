@@ -1,0 +1,110 @@
+/* Additive styles for OUTTHERE-specific components not covered by the
+   existing design system (index.css / design-polish.css), which this
+   file is layered on top of -- reuses the same paper/ink/accent tokens
+   rather than introducing a new palette. */
+
+.business-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  background: #fffdf8;
+  border: 1px solid #b8ad99;
+  border-radius: 10px;
+  padding: 24px;
+}
+.business-form .field-full { grid-column: 1 / -1; }
+.business-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6e5439;
+}
+.business-form input,
+.business-form textarea {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: #41382f;
+  background: #fff;
+  border: 1px solid var(--border, #ded8cd);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.business-form input::placeholder,
+.business-form textarea::placeholder {
+  color: #a89a84;
+}
+.business-form textarea { resize: vertical; min-height: 64px; }
+.business-form .form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+@media (max-width: 720px) {
+  .business-form { grid-template-columns: 1fr; }
+}
+
+.example-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0 20px;
+}
+.example-chips button {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8f3d29;
+  background: #f6efe2;
+  border: 1px solid #e0d3bc;
+  border-radius: 999px;
+  padding: 7px 14px;
+}
+.example-chips button:hover { background: #efe4d0; }
+
+.opportunity-score-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: #fffdf8;
+  border: 1px solid #e0d3bc;
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin: 20px 0;
+}
+.opportunity-score-banner strong {
+  font-family: var(--font-editorial);
+  font-size: 36px;
+  font-weight: 400;
+  color: var(--accent, #a5482d);
+}
+.opportunity-score-banner small { display: block; font-size: 11px; color: #8b7255; font-weight: 700; }
+
+.scene-list { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+.scene-item {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 14px;
+  padding: 12px 14px;
+  background: #fdfbf6;
+  border: 1px solid var(--border, #ded8cd);
+  border-radius: 8px;
+}
+.scene-item .scene-timing { font-weight: 700; color: #8b7255; font-size: 12px; }
+.scene-item p { margin: 0 0 4px; font-size: 13px; line-height: 1.5; }
+.scene-item .scene-text { font-style: italic; color: #6e5439; font-size: 12px; }
+
+.video-result { margin-top: 16px; padding: 16px; border-radius: 8px; background: #f6efe2; border: 1px solid #e0d3bc; }
+.video-result video { width: 100%; border-radius: 8px; margin-top: 10px; max-width: 320px; }
+
+.competitor-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.competitor-list .competitor-row { display: flex; justify-content: space-between; font-size: 12px; color: #6b6356; padding: 6px 0; border-bottom: 1px solid #f0ebe0; }
+
+.status-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
+.status-pill.ok { color: #497458; }
+.status-pill.off { color: #a65e51; }
+
+.integration-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 18px; }

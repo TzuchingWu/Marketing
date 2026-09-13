@@ -1,0 +1,226 @@
+﻿/* ZIP skill audit: hierarchy, readable density, and deliberate interaction.
+   Font families are inherited unchanged from index.css. */
+:root { --pulse-rule: #dcd3c4; --pulse-secondary: #706454; --pulse-focus: #935034; }
+.agent-workbench { grid-template-columns: minmax(0, 1fr) 310px; gap: 48px; padding-top: 15px; padding-bottom: 38px; }
+.agent-context { margin-bottom: 17px; }
+.agent-desk h1 { font-size: clamp(32px, 3.3vw, 43px); line-height: 1.16; text-wrap: balance; }
+.company-brief { display: flex; align-items: center; gap: 11px; margin: 23px 0 19px; padding-block: 13px; border-block: 1px solid var(--pulse-rule); }
+.company-monogram { display: grid; place-items: center; height: 34px; width: 34px; background: #e7e7d7; color: #5a6645; font-size: 28px; font-weight: 700; font-style: italic; line-height: 1; }
+.company-brief > div { display: flex; flex-direction: column; gap: 3px; }
+.company-brief strong { font-size: 14px; color: #3c342b; }
+.company-brief > div > span { font-size: 12px; color: var(--pulse-secondary); }
+.company-brief-caption { margin-left: auto; font-size: 11px; color: #796b59; white-space: nowrap; }
+.agent-introduction { margin: 0 0 18px; max-width: 580px; font-size: 16px; }
+.command-composer { border-color: #b4a58e; box-shadow: 0 2px 5px #5e493509; padding: 18px; }
+.command-composer textarea { min-height: 108px; }
+.command-composer textarea::placeholder { color: #7e7160; }
+.composer-controls > span { font-size: 11px; color: #756755; line-height: 1.45; }
+.composer-controls kbd { display: block; font-family: inherit; font-size: 10px; font-weight: 400; margin-top: 4px; color: #817361; }
+.composer-controls .btn { min-width: 115px; min-height: 40px; }
+.task-widgets { margin-top: 17px; gap: 8px; }
+.task-widgets button { padding: 12px 5px; gap: 9px; border-radius: 3px; }
+.task-widgets button span { font-size: 12px; }
+.task-widgets button svg { width: 29px; height: 29px; }
+.agent-response { margin-top: 20px; }
+.request-receipt { border-left: 2px solid #b18b63; padding-left: 13px; margin-bottom: 17px; }
+.request-receipt > span { font-size: 10px; letter-spacing: .8px; font-weight: 700; color: #846b50; }
+.request-receipt p { font-size: 14px; line-height: 1.55; color: #514536; margin-top: 4px; overflow-wrap: anywhere; }
+.response-status { font-size: 12px; font-weight: 700; }
+.agent-response > p:not(.command-note) { font-size: 15px; line-height: 1.65; }
+.command-note { color: #766957; font-size: 12px; }
+.agent-activity-rail { padding-left: 26px; }
+.rail-heading h2 { font-size: 18px; }
+.rail-description { font-size: 12px; color: #796a57; }
+.agent-activity-rail .activity-item { gap: 9px; padding-bottom: 21px; }
+.agent-activity-rail .activity-meta { font-size: 10px; color: #816e56; }
+.agent-activity-rail .activity-meta time { color: #816e56; }
+.agent-activity-rail .activity-item h4 { font-size: 13px; line-height: 1.4; color: #473d30; }
+.agent-activity-rail .activity-item p { font-size: 12px; color: #7b6b57; line-height: 1.5; margin-top: 5px; }
+.connected-sources > span { font-size: 11px; }
+.source-context small { color: #7b6c59; font-size: 10px; }
+.agent-output .section-heading { margin-bottom: 8px; }
+.output-introduction { color: #756754; font-size: 14px; margin-bottom: 22px; }
+.ranked-opportunity { padding-block: 26px; }
+.ranked-opportunity:first-child { border-top: 2px solid #a67b55; }
+.recommendation-index { font-variant-numeric: tabular-nums; }
+.recommendation-index span { font-size: 9px; line-height: 1.5; }
+.recommendation-list .card-extra { font-size: 11px; color: #7b6d59; line-height: 1.5; }
+.recommendation-list .opportunity-content h3 { margin: 11px 0; }
+.recommendation-list .score small { font-size: 10px; color: #796751; }
+.recommendation-list .card-stats { flex-wrap: wrap; row-gap: 6px; }
+.recommendation-list .card-stats span { font-size: 12px; }
+.recommendation-list .tags span { font-size: 12px; }
+.recommendation-list .card-link { min-height: 40px; }
+.recommendation-list .btn.compact { min-height: 36px; font-size: 12px; padding-inline: 14px; }
+.agent-results { padding-top: 30px; }
+.results-summary { font-variant-numeric: tabular-nums; }
+.icon-button { min-width: 34px; min-height: 34px; }
+.btn.compact { min-height: 34px; }
+.search-field input { min-height: 24px; }
+nav.top-navigation button { min-height: 44px; }
+.text-button { min-height: 30px; }
+.account-link { min-height: 36px; padding-inline: 6px; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--pulse-focus); outline-offset: 4px; }
+.btn, .task-widgets button, .platform-widgets button { transition: transform 120ms cubic-bezier(.23,1,.32,1), opacity 120ms; }
+button:hover:not(:disabled) { filter: none; }
+.task-widgets button:hover:not(:disabled), .platform-widgets button:hover img, .opportunity-card:hover { transform: none; }
+@media (hover: hover) and (pointer: fine) {
+  .task-widgets button:hover:not(:disabled) { background: #efe9de; }
+  .platform-widgets button:hover { background: #f0ebdf; }
+  .btn:active:not(:disabled):not(:focus-visible), .task-widgets button:active:not(:disabled):not(:focus-visible), .platform-widgets button:active:not(:focus-visible) { transform: scale(.98); }
+}
+@media (max-width: 1000px) {
+  .agent-workbench { grid-template-columns: minmax(0, 1fr) 275px; gap: 27px; }
+  .agent-activity-rail { padding-left: 20px; }
+  .company-brief-caption { display: none; }
+}
+@media (max-width: 760px) {
+  .agent-workbench { grid-template-columns: 1fr; gap: 26px; }
+  .agent-activity-rail { border-left: 0; border-top: 1px solid var(--pulse-rule); padding: 22px 0 0; }
+  .agent-activity-rail .activity-feed { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .agent-activity-rail .activity-item:before { display: none; }
+  .agent-activity-rail .activity-symbol { display: none; }
+  .agent-activity-rail .activity-meta { flex-wrap: wrap; gap: 4px; }
+  .company-brief-caption { display: block; }
+}
+@media (max-width: 480px) {
+  .agent-desk h1 { font-size: 33px; }
+  .company-brief-caption { display: none; }
+  .agent-activity-rail .activity-feed { grid-template-columns: 1fr; gap: 0; }
+  .agent-activity-rail .activity-symbol { display: grid; }
+  .composer-controls > span { max-width: 165px; }
+  .command-composer { padding: 14px; }
+  .task-widgets button span { font-size: 11px; }
+  .icon-button { min-width: 40px; min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn, .task-widgets button, .platform-widgets button { transition: none; }
+  .btn:active, .task-widgets button:active, .platform-widgets button:active { transform: none !important; }
+}
+@media (prefers-contrast: more) {
+  .agent-introduction, .command-note, .rail-description, .agent-activity-rail .activity-item p, .output-introduction { color: #40372d; }
+  .command-composer, .agent-activity-rail, .ranked-opportunity { border-color: #77644e; }
+}
+
+/* animate/SKILL.md: frequent interactions, feedback only, no decorative motion. */
+:root { --ease-out: cubic-bezier(.23, 1, .32, 1); --motion-press: 120ms; --motion-hover: 160ms; }
+button:not(:disabled), a[href] {
+  transition: transform var(--motion-press) var(--ease-out), opacity var(--motion-hover) var(--ease-out);
+}
+/* A card remains a content group; its existing buttons are the action targets. */
+.opportunity-card:has(button:not(:disabled)) {
+  position: relative;
+  isolation: isolate;
+  transition: transform var(--motion-hover) var(--ease-out);
+}
+.opportunity-card:has(button:not(:disabled))::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 4px;
+  box-shadow: 0 5px 14px #60442512, 0 0 0 1px #a88d6b28;
+  opacity: 0;
+  transition: opacity var(--motion-hover) var(--ease-out);
+}
+nav.top-navigation button { position: relative; }
+nav.top-navigation button::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: currentColor;
+  opacity: 0;
+  transform: scaleX(.7);
+  transform-origin: center;
+  transition: transform var(--motion-hover) var(--ease-out), opacity var(--motion-hover) var(--ease-out);
+  pointer-events: none;
+}
+button:not(:disabled):active:not(:focus-visible), a[href]:active:not(:focus-visible) {
+  transform: scale(.98);
+}
+@media (hover: hover) and (pointer: fine) {
+  .opportunity-card:has(button:not(:disabled)):hover:not(:has(:focus-visible)) { transform: translateY(-2px); }
+  .opportunity-card:has(button:not(:disabled)):hover::after { opacity: 1; }
+  .opportunity-card:has(button:active:not(:focus-visible)) { transform: translateY(-1px); }
+  .btn:hover:not(:disabled):not(:focus-visible), .task-widgets button:hover:not(:disabled):not(:focus-visible), .platform-widgets button:hover:not(:disabled):not(:focus-visible), .icon-button:hover:not(:disabled):not(:focus-visible) { transform: translateY(-1px); }
+  .btn:active:not(:disabled):not(:focus-visible), .task-widgets button:active:not(:disabled):not(:focus-visible), .platform-widgets button:active:not(:disabled):not(:focus-visible), .icon-button:active:not(:disabled):not(:focus-visible) { transform: scale(.98); }
+  nav.top-navigation button:hover:not(:focus-visible)::after { opacity: .6; transform: scaleX(1); }
+  nav.top-navigation button.active::after { opacity: 0; }
+  .text-button:hover:not(:disabled), .card-link:hover:not(:disabled), .account-link:hover { opacity: .78; }
+}
+/* Keyboard feedback is immediate and stationary, including focused cards. */
+button:focus-visible, a[href]:focus-visible,
+.opportunity-card:has(:focus-visible) { transition: none !important; transform: none !important; }
+nav.top-navigation button:focus-visible::after,
+.opportunity-card:has(:focus-visible)::after { transition: none; transform: none; opacity: 0; }
+@media (hover: none), (pointer: coarse) {
+  .opportunity-card:hover, .task-widgets button:hover, .platform-widgets button:hover img { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  button, a[href], .opportunity-card,
+  .opportunity-card:has(button:not(:disabled)),
+  .opportunity-card:has(button:not(:disabled)):hover,
+  .opportunity-card:has(button:active),
+  .btn:hover, .icon-button:hover, .task-widgets button:hover, .platform-widgets button:hover,
+  button:active, a[href]:active { transform: none !important; transition: none !important; }
+  .opportunity-card::after, nav.top-navigation button::after { transform: none !important; transition: none !important; }
+}
+
+/* Simplified editorial hierarchy and shared semantic color palette. */
+:root { --paper: #faf8f2; --ink: #292622; --accent: #a5482d; --pulse-secondary: #746c61; --pulse-rule: #ddd6ca; --positive: #527147; }
+.site-header, .global-bar { background: var(--paper); }
+.global-bar { border-bottom: 1px solid var(--pulse-rule); }
+.global-inner { height: auto; min-height: 70px; gap: 27px; }
+.global-inner nav.top-navigation { margin-left: auto; gap: 20px; }
+.global-actions { gap: 10px; margin-left: 0; }
+.pulse-wordmark .pulse-logo { opacity: .78; }
+.agent-workbench { display: block; max-width: 820px; margin: 5px auto 34px; padding: 0; }
+.agent-desk h1 { margin-bottom: 24px; }
+.composer-controls { justify-content: flex-end; border-top: 0; padding-top: 3px; }
+.command-composer textarea { min-height: 94px; }
+.task-widgets { max-width: none; margin-top: 14px; }
+.agent-response:empty { display: none; }
+.agent-response { margin-top: 14px; }
+.response-status { color: var(--positive); }
+.agent-output { padding-top: 28px; }
+.agent-output .section-heading { margin-bottom: 20px; }
+.recommendation-list .ranked-opportunity { grid-template-columns: 56px minmax(0, 1fr); padding-block: 22px; }
+.compact-opportunity .badge { display: none; }
+.recommendation-list .compact-opportunity .opportunity-content h3 { margin-top: 8px; }
+.recommendation-list .compact-opportunity .score { color: var(--ink); }
+.recommendation-list .compact-opportunity .card-stats span { color: var(--pulse-secondary); }
+.recommendation-list .compact-opportunity .card-stats span:first-child b, .card-stats span:first-child svg { color: var(--positive); }
+.recommendation-list .compact-opportunity .card-stats span:last-child b { color: var(--ink); }
+.recommendation-list .compact-opportunity .opportunity-content > p { margin: 12px 0 7px; color: var(--pulse-secondary); }
+.recommendation-list .compact-opportunity .opportunity-art { height: 145px; filter: saturate(.65); }
+.research-details { border-top: 1px solid var(--pulse-rule); margin-top: 22px; padding-top: 16px; }
+.research-details summary { cursor: pointer; color: var(--pulse-secondary); font-size: 14px; width: fit-content; padding: 8px 0; }
+.research-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.research-details .agent-results { border: 0; margin-top: 0; }
+.text-button, .card-link, .tabs button.active, .connect, .recommendation-facts strong { color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); }
+.btn:not(.primary) { color: var(--ink); }
+.tabs button.active { border-color: var(--accent); }
+.tabs button span, .connect { background: #f1ebe1; }
+.muted, .activity-meta, .creative-field label, .brief-item span, .audience-facts span, .performance span { color: var(--pulse-secondary); }
+.insight, .insight p, .insight strong, .brief-item, .creative-field p, .performance strong, td, td strong { color: var(--ink); }
+.badge.green, .green-text { color: var(--positive) !important; }
+@media (max-width: 1000px) {
+ .global-inner { gap: 18px; flex-wrap: wrap; padding-block: 10px; }
+ .global-inner nav.top-navigation { order: 3; width: 100%; justify-content: space-between; margin-left: 0; }
+ .global-actions { margin-left: auto; }
+}
+@media (max-width: 680px) {
+ .global-inner { min-height: 62px; gap: 10px; }
+ .global-inner .nav-toggle { order: 2; margin-left: 0; }
+ .global-actions { margin-left: auto; }
+ .global-inner nav.top-navigation { order: 4; gap: 0; }
+ .agent-workbench { margin-bottom: 27px; }
+ .agent-desk h1 { margin-bottom: 20px; }
+ .recommendation-list .ranked-opportunity { grid-template-columns: 1fr; }
+ .recommendation-index { margin-bottom: 6px; }
+}
