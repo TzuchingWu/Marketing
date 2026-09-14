@@ -1,0 +1,43 @@
+# Render Blueprint -- https://render.com/docs/blueprint-spec
+#
+# Deploys the FastAPI backend as one persistent web service (not
+# serverless), which is what this app actually needs: client_manager.py
+# spawns the MCP server as a long-lived subprocess at startup and keeps
+# it running for the process's whole lifetime, and business_store.py
+# keeps analyzed businesses in an in-memory dict shared across requests.
+# Both of those require a single process that stays alive between
+# requests -- exactly what this gives you, and what serverless platforms
+# (Vercel, Lambda) don't.
+#
+# To deploy: render.com -> New -> Blueprint -> connect this repo. Render
+# reads this file automatically. After the first deploy, add your real
+# API key values in the service's Environment tab in the Render
+# dashboard -- never commit them here (every var below is `sync: false`,
+# meaning Render will prompt for a value rather than reading one from
+# this file).
+
+services:
+  - type: web
+    name: outthere-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: HUBSPOT_ACCESS_TOKEN
+        sync: false
+      - key: GOOGLE_VEO_API_KEY
+        sync: false
+      - key: VEO_MODEL
+        value: veo-3.1-fast-generate-preview
+      - key: OPEN_AI_WEBSEARCH_API_KEY
+        sync: false
+      - key: OPEN_AI_WEBSEARCH_MODEL
+        value: gpt-4o
