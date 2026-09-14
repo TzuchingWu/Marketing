@@ -32,6 +32,21 @@ import httpx
 _BASE_URL = "https://maps.googleapis.com/maps/api/place"
 _TIMEOUT = 6.0  # seconds -- fail fast so a slow/unreachable API never hangs a demo request
 
+# Places' Find Place / Text Search endpoints bias ambiguous results toward
+# the REQUESTING SERVER'S IP geolocation when no explicit location bias is
+# given (this is documented default behavior, "ipbias"). That means a
+# vague query run from wherever this backend happens to be hosted (e.g. a
+# Render/Railway/Fly datacenter that could be anywhere) can resolve to a
+# completely wrong, far-away business -- observed live: "silver spoon"
+# with no location mentioned resolved to a burger restaurant in Salem, OR
+# because the backend was running in an Oregon datacenter. Always bias
+# toward OUTTHERE's actual demo service area (Arcadia, CA / San Gabriel
+# Valley) instead, so results are deterministic regardless of where the
+# server is physically hosted.
+_DEFAULT_BIAS_LAT = 34.1397
+_DEFAULT_BIAS_LNG = -118.0353
+_DEFAULT_BIAS_RADIUS_METERS = 40000  # ~25 miles -- covers the greater LA / SGV area
+
 
 def is_configured() -> bool:
     return bool(os.getenv("GOOGLE_MAPS_API_KEY"))
@@ -126,6 +141,7 @@ def lookup_business(business_name: str, location: str, business_type: str = "") 
         "input": query,
         "inputtype": "textquery",
         "fields": "place_id",
+        "locationbias": f"circle:{_DEFAULT_BIAS_RADIUS_METERS}@{_DEFAULT_BIAS_LAT},{_DEFAULT_BIAS_LNG}",
     })
     if not find_result or not find_result.get("candidates"):
         return None
@@ -147,7 +163,11 @@ def search_businesses(query: str, location_hint: str = "", max_results: int = 5)
     nothing.
     """
     full_query = f"{query} {location_hint}".strip()
-    result = _get("textsearch", {"query": full_query})
+    result = _get("textsearch", {
+        "query": full_query,
+        "location": f"{_DEFAULT_BIAS_LAT},{_DEFAULT_BIAS_LNG}",
+        "radius": _DEFAULT_BIAS_RADIUS_METERS,
+    })
     if not result:
         return []
 

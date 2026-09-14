@@ -76,6 +76,41 @@ def test_search_businesses_without_key_returns_empty(monkeypatch):
     assert places_service.search_businesses("Ace Karaoke") == []
 
 
+def test_search_businesses_always_sends_explicit_location_bias(monkeypatch):
+    """Places biases ambiguous queries toward the REQUESTING SERVER'S IP
+    geolocation when no explicit bias is given -- observed live: a query
+    with no location resolved to a business in Salem, OR because the
+    backend happened to be hosted in an Oregon datacenter. This must
+    always pass an explicit bias so results don't depend on server
+    hosting location."""
+    captured = {}
+
+    def fake_get(path, params):
+        captured["params"] = params
+        return {"status": "OK", "results": []}
+
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "fake-key")
+    monkeypatch.setattr(places_service, "_get", fake_get)
+
+    places_service.search_businesses("Silver Spoon")
+    assert "location" in captured["params"]
+    assert "radius" in captured["params"]
+
+
+def test_lookup_business_always_sends_explicit_location_bias(monkeypatch):
+    captured = {}
+
+    def fake_get(path, params):
+        captured["params"] = params
+        return {"status": "ZERO_RESULTS", "candidates": []}
+
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "fake-key")
+    monkeypatch.setattr(places_service, "_get", fake_get)
+
+    places_service.lookup_business("Some Business", "Arcadia, CA")
+    assert "locationbias" in captured["params"]
+
+
 def test_search_businesses_parses_multiple_results(monkeypatch):
     fake_response = {
         "status": "OK",
