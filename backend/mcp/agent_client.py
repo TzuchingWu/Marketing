@@ -4,8 +4,10 @@ shared MCP ClientSession (see client_manager.py), exactly like Claude
 Desktop or any other MCP host would drive a tool-using agent. This is
 what makes MCP central to the architecture rather than a README mention:
 nothing here calls the service layer directly, every step goes
-analyze_business -> search_creators -> rank_creators -> generate_campaign
-through real MCP tool_call requests.
+analyze_business -> find_and_rank_creators -> generate_campaign through
+real MCP tool_call requests. find_and_rank_creators itself prefers real
+creators (YouTube + web search) when configured, falling back to the
+demo dataset otherwise -- see creator_tools.py.
 
 Two modes:
   - Agentic (requires ANTHROPIC_API_KEY): Claude sees the MCP tool list
@@ -34,12 +36,19 @@ AGENT_SYSTEM_PROMPT = (
     "market with -- fit over fame, not just follower count.\n\n"
     "Follow this workflow using the tools available to you: "
     "1) analyze_business first. "
-    "2) search_creators using the resulting category/location. "
-    "3) rank_creators on the candidate ids search_creators returned, to score them. "
-    "4) generate_campaign using business_id and the top 3-5 creator_ids from rank_creators. "
+    "2) find_and_rank_creators using the resulting category/location -- it automatically "
+    "searches real creators (YouTube + web search) when configured, falling back to the demo "
+    "dataset otherwise, and returns them already scored and ranked. "
+    "3) generate_campaign using business_id and the top 3-5 creator_ids it returned. "
     "Then write a short (2-3 sentence) summary of your recommendation for the business owner. "
     "Do not call generate_outreach yet -- that happens later once the owner picks a creator."
 )
+
+# These stay available on the raw MCP server (for a real MCP client, or
+# direct REST calls) but are hidden from the in-app agent's own tool
+# list -- with find_and_rank_creators also present, having near-duplicate
+# creator-search tools invites the model to pick the wrong one.
+_HIDDEN_FROM_AGENT = {"generate_outreach", "search_creators", "rank_creators", "search_real_creators", "search_youtube_creators"}
 
 
 def _summarize(tool_name: str, args: dict, parsed: Any) -> str:
@@ -53,6 +62,11 @@ def _summarize(tool_name: str, args: dict, parsed: Any) -> str:
         if tool_name == "rank_creators":
             return (f"Ranked {len(parsed)} creator(s), top match {parsed[0]['handle']} ({parsed[0]['fit_score']}/100)"
                     if parsed else "No creators to rank")
+        if tool_name == "find_and_rank_creators":
+            creators = parsed.get("creators", [])
+            label = "real" if parsed.get("source") == "real" else "demo"
+            return (f"Found {len(creators)} {label} creator(s), top match {creators[0]['handle']} ({creators[0]['fit_score']}/100)"
+                    if creators else "No creators found")
         if tool_name == "generate_campaign":
             return f"Created ${parsed.get('estimated_spend', 0)} campaign reaching ~{parsed.get('expected_reach', 0):,}"
         if tool_name == "generate_outreach":
@@ -80,33 +94,28 @@ async def _run_scripted(business_input: dict, activity_log: list[dict]) -> dict:
     business = await _call("analyze_business", {"business": business_input}, activity_log)
     business_id = business["business_id"]
 
-    candidates = await _call("search_creators", {
+    found = await _call("find_and_rank_creators", {
+        "business_id": business_id,
         "category": business["business_category"],
         "location": business["location"],
         "target_audience": business_input.get("target_audience", ""),
-        "max_results": 10,
+        "max_results": 5,
     }, activity_log)
-    candidate_ids = [c["id"] for c in candidates]
+    top_creators = found.get("creators", []) if isinstance(found, dict) else []
+    creator_source = found.get("source", "demo") if isinstance(found, dict) else "demo"
+    top_ids = [c["creator_id"] for c in top_creators]
 
-    ranked = await _call("rank_creators", {
-        "business_id": business_id,
-        "creator_ids": candidate_ids,
-    }, activity_log)
-
-    top_ids = [r["creator_id"] for r in ranked[:5]]
     campaign = await _call("generate_campaign", {
         "business_id": business_id,
         "creator_ids": top_ids,
     }, activity_log)
 
-    provider_lookup = {c["id"]: c for c in candidates}
-    top_creators = [{**provider_lookup.get(r["creator_id"], {}), **r} for r in ranked[:5]]
-
     summary = "No strong creator matches were found for this business yet."
     if top_creators:
+        kind = "real" if creator_source == "real" else "demo-dataset"
         summary = (
-            f"Based on {business_input['business_name']}'s profile, we found {len(candidates)} candidate "
-            f"creators and ranked them by fit. The top match is {top_creators[0]['handle']} at "
+            f"Based on {business_input['business_name']}'s profile, we found {len(top_creators)} "
+            f"{kind} creators and ranked them by fit. The top match is {top_creators[0]['handle']} at "
             f"{top_creators[0]['fit_score']}/100."
         )
 
@@ -116,6 +125,7 @@ async def _run_scripted(business_input: dict, activity_log: list[dict]) -> dict:
         "campaign": campaign,
         "agent_summary": summary,
         "mode": "scripted",
+        "creator_source": creator_source,
     }
 
 
@@ -126,7 +136,7 @@ async def _run_agentic(business_input: dict, activity_log: list[dict]) -> dict:
     anthropic_tools = [
         {"name": t.name, "description": t.description or "", "input_schema": t.inputSchema}
         for t in tools
-        if t.name != "generate_outreach"  # not part of the discovery workflow yet
+        if t.name not in _HIDDEN_FROM_AGENT
     ]
 
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -139,9 +149,9 @@ async def _run_agentic(business_input: dict, activity_log: list[dict]) -> dict:
 
     business_id = None
     business_result = None
-    ranked = None
+    top_creators: list[dict] = []
+    creator_source = "demo"
     campaign = None
-    candidates = []
     final_text = ""
 
     for _ in range(8):
@@ -166,10 +176,9 @@ async def _run_agentic(business_input: dict, activity_log: list[dict]) -> dict:
             if block.name == "analyze_business" and isinstance(parsed, dict):
                 business_id = parsed.get("business_id")
                 business_result = parsed
-            elif block.name == "search_creators":
-                candidates = parsed if isinstance(parsed, list) else candidates
-            elif block.name == "rank_creators":
-                ranked = parsed if isinstance(parsed, list) else ranked
+            elif block.name == "find_and_rank_creators" and isinstance(parsed, dict):
+                top_creators = parsed.get("creators", top_creators)
+                creator_source = parsed.get("source", creator_source)
             elif block.name == "generate_campaign":
                 campaign = parsed if isinstance(parsed, dict) else campaign
 
@@ -180,7 +189,7 @@ async def _run_agentic(business_input: dict, activity_log: list[dict]) -> dict:
             })
         messages.append({"role": "user", "content": tool_result_blocks})
 
-    if ranked is None or campaign is None:
+    if not top_creators or campaign is None:
         # The model didn't finish the workflow within the turn budget --
         # fall back to the deterministic path so the demo still produces
         # a full result. (Fresh activity log: don't mix partial agentic
@@ -188,13 +197,11 @@ async def _run_agentic(business_input: dict, activity_log: list[dict]) -> dict:
         activity_log.clear()
         return await _run_scripted(business_input, activity_log)
 
-    provider_lookup = {c["id"]: c for c in candidates}
-    top_creators = [{**provider_lookup.get(r["creator_id"], {}), **r} for r in ranked[:5]]
-
     return {
         "business": business_result or {"business_id": business_id, **business_input},
-        "creators": top_creators,
+        "creators": top_creators[:5],
         "campaign": campaign,
+        "creator_source": creator_source,
         "agent_summary": final_text or "Recommendation ready.",
         "mode": "agentic",
     }

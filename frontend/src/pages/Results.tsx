@@ -5,6 +5,7 @@ import {
   Check,
   Clapperboard,
   Copy,
+  ExternalLink,
   Film,
   Loader2,
   RotateCcw,
@@ -241,8 +242,23 @@ function CreatorDetailModal({
       <div className="modal-body">
         <div className="flex justify-between items-center mb-3">
           <span className="score">{c.fit_score}<small> / 100 fit score</small></span>
-          <Badge tone={c.fit_score >= 85 ? "green" : "amber"}>{c.recommendation}</Badge>
+          <Badge tone={c.source && c.source !== "demo" ? "green" : c.fit_score >= 85 ? "green" : "amber"}>
+            {c.source === "youtube_api" ? "Real · YouTube" : c.source === "web_search" ? "Real · Web" : c.recommendation}
+          </Badge>
         </div>
+        {c.source && c.source !== "demo" && (
+          <p className="muted flex items-center gap-2" style={{ fontSize: 12 }}>
+            <span>
+              {c.verified ? "Verified" : "Unverified"} real {c.source === "youtube_api" ? "YouTube channel" : "creator"}
+            </span>
+            {c.source_url && (
+              <a href={c.source_url} target="_blank" rel="noreferrer" className="flex items-center gap-1">
+                {c.source === "youtube_api" ? "Watch on YouTube" : "View source"}
+                <ExternalLink size={12} />
+              </a>
+            )}
+          </p>
+        )}
         <p className="muted">{c.bio}</p>
         <div className="tags mt-3">
           <span>{c.platform}</span>
@@ -251,12 +267,15 @@ function CreatorDetailModal({
         </div>
 
         <div className="audience-icon mt-5"><Users size={24} /></div>
-        <h3>{c.followers.toLocaleString()} followers</h3>
+        <h3>{c.followers != null ? c.followers.toLocaleString() : "Unknown"} followers</h3>
         <p className="muted">
-          {c.audience_local_percentage}% local audience · {c.audience_age_range} primary age range ·{" "}
-          {c.engagement_rate}% engagement
+          {c.audience_local_percentage != null ? `${c.audience_local_percentage}% local audience · ` : "Local audience % unverified · "}
+          {c.audience_age_range ? `${c.audience_age_range} primary age range · ` : "Age range unverified · "}
+          {c.engagement_rate != null ? `${c.engagement_rate}% engagement` : "Engagement unverified"}
         </p>
-        <p className="muted">Estimated collaboration: ${c.estimated_collaboration_cost}</p>
+        <p className="muted">
+          Estimated collaboration: {c.estimated_collaboration_cost != null ? `$${c.estimated_collaboration_cost}` : "Unknown -- not public data"}
+        </p>
 
         <span className="eyebrow mt-5" style={{ display: "block" }}>SCORE BREAKDOWN</span>
         <ScoreBreakdownBars breakdown={c.score_breakdown} />
@@ -293,7 +312,8 @@ function OutreachModal({
   onToast: (msg: string) => void;
 }) {
   const [tone, setTone] = useState("friendly");
-  const [offer, setOffer] = useState(`Free tasting + $${Math.min(150, creator.estimated_collaboration_cost)} sponsored post`);
+  const defaultOfferAmount = creator.estimated_collaboration_cost != null ? Math.min(150, creator.estimated_collaboration_cost) : 100;
+  const [offer, setOffer] = useState(`Free tasting + $${defaultOfferAmount} sponsored post`);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [logging, setLogging] = useState(false);

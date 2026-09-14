@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.services import creator_service, marketing_service, scoring_service, web_search_service, youtube_service
+from backend.services import creator_cache, creator_service, marketing_service, scoring_service, web_search_service, youtube_service
 from backend.services.business_store import get_business
 from backend.data.creator_provider import get_provider
 
@@ -34,6 +34,7 @@ def _score_and_rank_real_creators(business: dict, creators: list[dict]) -> list[
     # fall back to the same neutral default for everyone, so without a
     # tie-breaker "top creators" would come back in arbitrary API order.
     results.sort(key=lambda r: (r["fit_score"], r.get("followers") or 0), reverse=True)
+    creator_cache.cache_creators(results)  # so generate_campaign etc. can resolve these ids later
     return results
 
 
@@ -84,7 +85,7 @@ def register(mcp) -> None:
             raise ValueError(f"Could not find creator '{creator_id}' or business '{business_id}'.")
 
         business = get_business(business_id)
-        creator = get_provider().get_creator(creator_id)
+        creator = creator_cache.get_cached_creator(creator_id) or get_provider().get_creator(creator_id)
         result["explanation"] = marketing_service.explain_creator_fit(business, creator, result)
         return result
 
@@ -117,7 +118,7 @@ def register(mcp) -> None:
         max_llm_explanations = 5
         provider = get_provider()
         for i, result in enumerate(results):
-            creator = provider.get_creator(result["creator_id"])
+            creator = creator_cache.get_cached_creator(result["creator_id"]) or provider.get_creator(result["creator_id"])
             result["explanation"] = marketing_service.explain_creator_fit(
                 business, creator, result, use_llm=i < max_llm_explanations
             )
@@ -218,3 +219,93 @@ def register(mcp) -> None:
         if not creators:
             return []
         return _score_and_rank_real_creators(business, creators)
+
+    @mcp.tool()
+    def find_and_rank_creators(
+        business_id: str,
+        category: str,
+        location: str,
+        target_audience: str = "",
+        max_results: int = 5,
+    ) -> dict:
+        """
+        The preferred way to find creators for the main recommend flow:
+        searches REAL creators first (YouTube Data API + OpenAI web
+        search, combined and deduplicated) whenever those are configured,
+        and only falls back to the demo dataset if no real-creator keys
+        are set or a real search comes back empty. Always returns
+        scored, ranked results either way.
+
+        Use this INSTEAD of calling search_creators + rank_creators
+        separately for the primary "find my creators" action -- it
+        automatically prefers real data when available, with a fully
+        reliable offline fallback so the workflow never breaks.
+
+        Input: business_id (from analyze_business), category, location,
+        target_audience (optional), max_results (default 5).
+
+        Returns: {"creators": [...same shape as rank_creators, plus
+        "source"/"verified" on real ones...], "source": "real" | "demo"}
+        """
+        business = get_business(business_id)
+        if business is None:
+            raise ValueError(f"Could not find business '{business_id}'. Call analyze_business first.")
+
+        # Prefer the business's own sub_category as the actual search term
+        # when it's more specific than the broad category passed in (e.g.
+        # "karaoke bar" vs "nightlife") -- a vague category returns
+        # generic results with no real topical connection to the business.
+        sub_category = business.get("sub_category")
+        search_term = sub_category if sub_category and sub_category != category else category
+
+        # Try the location-qualified search first (most targeted, and the
+        # common case where it's enough). Only ALSO run a location-less
+        # search if that came back thin -- a small/ambiguous city name
+        # (e.g. "San Gabriel", also a common Spanish given name) can drag
+        # a location-qualified query toward unrelated results, and a
+        # sparse result set is the main symptom of that. This keeps the
+        # common case to one API call per source instead of always two,
+        # since each real search is a real network call with its own
+        # latency/failure risk.
+        real_creators: list[dict] = []
+        if web_search_service.is_configured():
+            real_creators += web_search_service.find_real_creators(search_term, location, target_audience, max_results)
+        if youtube_service.is_configured():
+            real_creators += youtube_service.search_creators(search_term, location, max_results)
+
+        if len(real_creators) < max_results:
+            if web_search_service.is_configured():
+                real_creators += web_search_service.find_real_creators(search_term, "", target_audience, max_results)
+            if youtube_service.is_configured():
+                real_creators += youtube_service.search_creators(search_term, "", max_results)
+
+        if real_creators:
+            # Same creator can legitimately turn up in both the broad and
+            # location-qualified searches above -- when it does, keep
+            # whichever occurrence actually carries a location (needed
+            # for locality scoring to give it fair credit) over one that
+            # came back from the location-less search with location="".
+            by_key: dict[tuple[str, str], dict] = {}
+            for creator in real_creators:
+                key = (creator.get("platform", "").lower(), creator.get("handle", "").lower().lstrip("@"))
+                existing = by_key.get(key)
+                if existing is None or (not existing.get("location") and creator.get("location")):
+                    by_key[key] = creator
+            deduped = list(by_key.values())
+
+            ranked = _score_and_rank_real_creators(business, deduped)[:max_results]
+            if ranked:
+                return {"creators": ranked, "source": "real"}
+
+        # Fallback: the always-available demo dataset.
+        candidates = creator_service.search_creators(category, location, target_audience, max_results * 2)
+        candidate_lookup = {c["id"]: c for c in candidates}
+        ranked_demo = creator_service.rank_creators(business_id, list(candidate_lookup.keys()))[:max_results]
+
+        max_llm_explanations = 5
+        results = []
+        for i, r in enumerate(ranked_demo):
+            creator = candidate_lookup.get(r["creator_id"], {})
+            r["explanation"] = marketing_service.explain_creator_fit(business, creator, r, use_llm=i < max_llm_explanations)
+            results.append({**creator, **r})
+        return {"creators": results, "source": "demo"}

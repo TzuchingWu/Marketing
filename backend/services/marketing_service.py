@@ -310,17 +310,30 @@ def generate_outreach(business: dict, creator: dict, offer: str, tone: str = "fr
 def _allocate_budget(creators: list[dict], budget: int) -> tuple[list[dict], int]:
     """Greedily include creators (highest fit first) while staying within
     budget. Returns (included_creators_with_spend, total_spend)."""
+    # Real creators (found via search) have no public pricing data --
+    # None here means genuinely unknown, not free. Treating unknown as
+    # $0 would silently let every high-profile real creator "fit" any
+    # budget and under-report the true estimated spend (observed: a
+    # campaign claiming "$0 spend" while including channels with
+    # millions of followers). A moderate placeholder based on the
+    # business's own budget is more honest than either extreme.
+    unknown_cost_estimate = max(1, round(budget / 5)) if budget > 0 else 50
+
+    def _cost(creator: dict) -> float:
+        cost = creator.get("estimated_collaboration_cost")
+        return cost if cost is not None else unknown_cost_estimate
+
     ordered = sorted(creators, key=lambda c: c.get("fit_score", 0), reverse=True)
     included = []
     remaining = budget
     for creator in ordered:
-        cost = creator.get("estimated_collaboration_cost", 0) or 0
+        cost = _cost(creator)
         if cost <= remaining:
             included.append(creator)
             remaining -= cost
     if not included and ordered:
         included = [ordered[0]]  # always recommend at least one creator
-    total_spend = sum(c.get("estimated_collaboration_cost", 0) or 0 for c in included)
+    total_spend = round(sum(_cost(c) for c in included))
     return included, total_spend
 
 

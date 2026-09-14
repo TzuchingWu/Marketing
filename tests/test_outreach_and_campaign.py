@@ -91,6 +91,22 @@ def test_generate_campaign_stays_within_budget():
     assert len(campaign["content_ideas"]) >= 1
 
 
+def test_generate_campaign_never_treats_unknown_cost_as_free():
+    """Real creators (found via search) have no public pricing data --
+    None must not be treated as $0, or a campaign could claim "$0 spend"
+    while actually including creators with millions of followers, wildly
+    misrepresenting the true cost to the business owner."""
+    business = {"business_name": "Ace Karaoke", "business_category": "nightlife", "location": "San Gabriel, CA"}
+    creators = [
+        {"handle": "@superstar", "fit_score": 95, "estimated_collaboration_cost": None, "followers": 3_000_000},
+        {"handle": "@superstar2", "fit_score": 90, "estimated_collaboration_cost": None, "followers": 2_000_000},
+    ]
+    campaign = marketing_service.generate_campaign(business, creators, budget=300, goal="local_customer_acquisition")
+
+    assert campaign["estimated_spend"] > 0  # never silently "free"
+    assert campaign["estimated_spend"] <= 300
+
+
 def test_generate_campaign_always_includes_at_least_one_creator():
     business = {"business_name": "Tiny Shop", "business_category": "food", "location": "Arcadia, CA"}
     creators = [{"handle": "@expensive", "fit_score": 99, "estimated_collaboration_cost": 5000, "followers": 1000}]

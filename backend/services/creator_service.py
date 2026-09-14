@@ -6,7 +6,7 @@ data provider and the deterministic scoring service.
 from __future__ import annotations
 
 from backend.data.creator_provider import get_provider
-from . import scoring_service
+from . import creator_cache, scoring_service
 from .business_store import get_business
 
 # Cities considered "in range" of each other for a location-aware search.
@@ -70,10 +70,18 @@ def search_creators(category: str, location: str, target_audience: str, max_resu
     return ranked[:max_results]
 
 
+def _resolve_creator(creator_id: str) -> dict | None:
+    """Look up a creator by id from wherever it actually lives: the
+    session cache first (real creators found via search_youtube_creators
+    / search_real_creators, which have no persistent catalog of their
+    own), then the mock CreatorProvider catalog."""
+    return creator_cache.get_cached_creator(creator_id) or get_provider().get_creator(creator_id)
+
+
 def analyze_creator(creator_id: str, business_id: str) -> dict | None:
     """Score a single creator against a previously-analyzed business."""
     business = get_business(business_id)
-    creator = get_provider().get_creator(creator_id)
+    creator = _resolve_creator(creator_id)
     if business is None or creator is None:
         return None
     return scoring_service.calculate_creator_fit_score(business, creator)
@@ -87,10 +95,9 @@ def get_creators_with_fit(business_id: str, creator_ids: list[str]) -> list[dict
     if business is None:
         return []
 
-    provider = get_provider()
     merged = []
     for creator_id in creator_ids:
-        creator = provider.get_creator(creator_id)
+        creator = _resolve_creator(creator_id)
         if creator is None:
             continue
         score_result = scoring_service.calculate_creator_fit_score(business, creator)
@@ -106,10 +113,9 @@ def rank_creators(business_id: str, creator_ids: list[str]) -> list[dict]:
     if business is None:
         return []
 
-    provider = get_provider()
     results = []
     for creator_id in creator_ids:
-        creator = provider.get_creator(creator_id)
+        creator = _resolve_creator(creator_id)
         if creator is None:
             continue
         results.append(scoring_service.calculate_creator_fit_score(business, creator))

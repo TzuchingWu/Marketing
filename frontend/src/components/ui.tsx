@@ -12,6 +12,7 @@ import {
   DollarSign,
   Users,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -106,9 +107,9 @@ export function CreatorCard({
     <article className="opportunity-card">
       <div className="opportunity-content" style={{ padding: rank ? "21px 21px 21px" : undefined }}>
         <div className="flex justify-between items-center">
-          <Badge tone={c.fit_score >= 85 ? "green" : c.fit_score >= 70 ? "amber" : "neutral"}>
+          <Badge tone={c.source && c.source !== "demo" ? "green" : c.fit_score >= 85 ? "green" : c.fit_score >= 70 ? "amber" : "neutral"}>
             <span className="dot" />
-            {c.recommendation}
+            {c.source === "youtube_api" ? "Real · YouTube" : c.source === "web_search" ? "Real · Web" : c.recommendation}
           </Badge>
           <span className="score">
             {c.fit_score}
@@ -122,14 +123,14 @@ export function CreatorCard({
         <div className="card-stats">
           <span>
             <Users size={13} />
-            <b>{c.followers.toLocaleString()}</b> followers
+            <b>{c.followers != null ? c.followers.toLocaleString() : "Unknown"}</b> followers
           </span>
           <span>
-            <b>{c.engagement_rate}%</b> engagement
+            <b>{c.engagement_rate != null ? `${c.engagement_rate}%` : "Unverified"}</b> engagement
           </span>
           <span>
             <DollarSign size={13} />
-            <b>${c.estimated_collaboration_cost}</b> est.
+            <b>{c.estimated_collaboration_cost != null ? `$${c.estimated_collaboration_cost}` : "Unknown"}</b> est.
           </span>
         </div>
         <p>{c.bio}</p>
@@ -140,6 +141,18 @@ export function CreatorCard({
             <span key={cat}>{cat}</span>
           ))}
         </div>
+        {c.source_url && (
+          <a
+            className="card-link"
+            href={c.source_url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {c.source === "youtube_api" ? "Watch on YouTube" : "View source"}
+            <ExternalLink size={14} />
+          </a>
+        )}
         <button className="card-link" onClick={onView}>
           View Creator
           <ArrowRight size={16} />

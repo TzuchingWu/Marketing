@@ -897,6 +897,28 @@ main {
   color: #86907f;
   font-size: 12px;
 }
+.team-credit {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0e7;
+}
+.team-credit ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+  padding: 0;
+}
+.team-credit a {
+  color: #536d44;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.team-credit a:hover {
+  text-decoration: underline;
+}
 .green-text {
   color: #568253 !important;
 }

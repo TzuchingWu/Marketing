@@ -145,10 +145,15 @@ def budget_score(business: dict, creator: dict) -> float:
     """0-10 points: how comfortably the creator's collaboration cost fits
     inside the business's monthly budget."""
     budget = business.get("budget", 0) or 0
-    cost = creator.get("estimated_collaboration_cost", 0) or 0
+    cost = creator.get("estimated_collaboration_cost")
 
     if budget <= 0:
         return 0.0
+    # None means genuinely unknown (real creators have no public pricing
+    # data) -- treat that as neutral, NOT as "definitely affordable".
+    # Explicitly-stated 0 (e.g. free promotion) still gets full marks.
+    if cost is None:
+        return 5.0
     if cost <= 0:
         return 10.0
 

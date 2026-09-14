@@ -71,13 +71,16 @@ export interface CreatorMatch {
   platform: string;
   location: string;
   categories: string[];
-  followers: number;
-  avg_likes: number;
-  avg_comments: number;
-  engagement_rate: number;
-  audience_age_range: string;
-  audience_local_percentage: number;
-  estimated_collaboration_cost: number;
+  // Real creators (source: "youtube_api" | "web_search") only have what
+  // their respective API can actually verify -- everything else comes
+  // back null rather than fabricated. The demo dataset always has all of these.
+  followers: number | null;
+  avg_likes: number | null;
+  avg_comments: number | null;
+  engagement_rate: number | null;
+  audience_age_range: string | null;
+  audience_local_percentage: number | null;
+  estimated_collaboration_cost: number | null;
   bio: string;
   fit_score: number;
   score_breakdown: ScoreBreakdown;
@@ -85,6 +88,9 @@ export interface CreatorMatch {
   weaknesses: string[];
   recommendation: string;
   explanation: string;
+  source?: "demo" | "youtube_api" | "web_search";
+  source_url?: string | null;
+  verified?: boolean;
 }
 
 export interface CampaignCreator {
@@ -122,6 +128,7 @@ export interface RecommendResult {
   agent_summary: string;
   mode: "agentic" | "scripted";
   activity_log: ActivityLogEntry[];
+  creator_source?: "real" | "demo";
 }
 
 export interface VideoScriptScene {

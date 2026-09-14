@@ -80,6 +80,14 @@ def _to_creator_dict(channel: dict, category: str, location: str) -> Optional[di
     if not channel_id or not title:
         return None
 
+    # YouTube auto-generates a "<Artist> - Topic" channel for every
+    # artist with music on the platform, aggregating their tracks. These
+    # aren't run by a person, have no way to contact or partner with
+    # them, and routinely have huge subscriber counts that would
+    # otherwise dominate results -- not real creator candidates.
+    if title.endswith(" - Topic"):
+        return None
+
     # Channel owners can hide subscriber count -- when hidden, the field
     # is simply absent rather than zero. Don't treat "hidden" as "0 subs".
     followers = None

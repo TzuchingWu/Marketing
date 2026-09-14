@@ -16,6 +16,12 @@ import { AgentActivityPage, Integrations } from "./pages/WorkspacePages";
 import { Modal } from "./components/ui";
 import * as api from "./api";
 
+const TEAM = [
+  { name: "Alton Su", linkedin: "https://www.linkedin.com/in/alton-su-73b321335/" },
+  { name: "Tzuching Wu", linkedin: "https://www.linkedin.com/in/tzuching-wu-5472b7216/" },
+  { name: "Patrick Rama", linkedin: "https://www.linkedin.com/in/patrick-rama/" },
+];
+
 const navigation = [
   { name: "Home" as Page, icon: Compass },
   { name: "Agent Activity" as Page, icon: Activity },
@@ -168,6 +174,18 @@ export default function App() {
               An AI-powered marketing agent that finds the right local content creator for your
               business -- ranked by fit, not follower count -- through a live MCP server backend.
             </p>
+            <div className="team-credit">
+              <span className="eyebrow">Built by</span>
+              <ul>
+                {TEAM.map((person) => (
+                  <li key={person.linkedin}>
+                    <a href={person.linkedin} target="_blank" rel="noreferrer">
+                      {person.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </Modal>
       )}

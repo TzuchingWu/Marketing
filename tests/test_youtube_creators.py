@@ -119,6 +119,31 @@ def test_channel_missing_title_is_skipped(monkeypatch):
     assert youtube_service.search_creators("food", "") == []
 
 
+def test_auto_generated_topic_channels_are_filtered_out(monkeypatch):
+    """YouTube auto-generates a "<Artist> - Topic" channel for every
+    artist with music on the platform -- these aren't run by a person
+    and can't be partnered with, so they must never come back as
+    creator candidates no matter how many subscribers they have."""
+    monkeypatch.setenv("YOUTUBE_API", "fake-key")
+    topic_and_real = {
+        "items": [
+            {"id": "UC_topic", "snippet": {"title": "Mana - Topic"}, "statistics": {"subscriberCount": "5000000"}},
+            {"id": "UC_real", "snippet": {"title": "Real Karaoke Channel"}, "statistics": {"subscriberCount": "500"}},
+        ],
+    }
+
+    def fake_get(path, params):
+        if path == "search":
+            return {"items": [{"snippet": {"channelId": "UC_topic"}}, {"snippet": {"channelId": "UC_real"}}]}
+        return topic_and_real
+
+    monkeypatch.setattr(youtube_service, "_get", fake_get)
+
+    results = youtube_service.search_creators("karaoke", "")
+    assert len(results) == 1
+    assert results[0]["name"] == "Real Karaoke Channel"
+
+
 def test_youtube_creator_gets_reasonable_overall_score():
     """A real YouTube creator with only followers/category/location known
     (everything else unverifiable) should score in a plausible middle

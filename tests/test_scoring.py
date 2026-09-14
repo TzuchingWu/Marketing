@@ -108,6 +108,21 @@ def test_over_budget_creators_are_penalized():
     assert expensive_result["score_breakdown"]["budget_fit"] == 0
 
 
+def test_unknown_collaboration_cost_is_neutral_not_affordable():
+    """A real creator with no public pricing data (e.g. a global
+    superstar found via YouTube search) must not score as a perfect
+    budget fit just because we don't know their real cost -- that
+    treats "unknown" as "definitely free", the opposite of reality."""
+    business = make_business(budget=300)
+    unknown_cost = make_creator(estimated_collaboration_cost=None)
+    genuinely_free = make_creator(estimated_collaboration_cost=0)
+    affordable = make_creator(estimated_collaboration_cost=50)
+
+    assert scoring_service.budget_score(business, unknown_cost) == 5.0
+    assert scoring_service.budget_score(business, genuinely_free) == 10.0
+    assert scoring_service.budget_score(business, unknown_cost) < scoring_service.budget_score(business, affordable)
+
+
 def test_no_category_overlap_scores_zero_content_relevance():
     business = make_business(business_category="fitness", target_interests=["fitness", "wellness"])
     unrelated_creator = make_creator(categories=["gaming", "tech"])
