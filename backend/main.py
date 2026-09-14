@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from backend.mcp import client_manager
 from backend.mcp.agent_client import run_agent_workflow
-from backend.services import hubspot_service, llm_client, places_service, veo_service, web_search_service
+from backend.services import hubspot_service, llm_client, places_service, veo_service, web_search_service, youtube_service
 
 
 @asynccontextmanager
@@ -99,6 +99,13 @@ class RealSearchRequest(BaseModel):
     max_results: int = 5
 
 
+class YoutubeSearchRequest(BaseModel):
+    business_id: str
+    category: str
+    location: str = ""
+    max_results: int = 5
+
+
 class LogOutreachRequest(BaseModel):
     creator_handle: str
     creator_name: str = ""
@@ -159,6 +166,7 @@ async def integrations_status():
         "hubspot": hubspot_service.is_configured(),
         "veo": veo_service.is_configured(),
         "web_search": web_search_service.is_configured(),
+        "youtube": youtube_service.is_configured(),
     }
 
 
@@ -214,6 +222,11 @@ async def rank_creators(req: RankRequest):
 @app.post("/api/creators/search-real")
 async def search_real_creators(req: RealSearchRequest):
     return await _call("search_real_creators", req.model_dump())
+
+
+@app.post("/api/creators/search-youtube")
+async def search_youtube_creators(req: YoutubeSearchRequest):
+    return await _call("search_youtube_creators", req.model_dump())
 
 
 @app.post("/api/outreach/generate")

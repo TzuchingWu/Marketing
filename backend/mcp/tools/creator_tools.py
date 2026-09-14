@@ -2,9 +2,39 @@
 
 from __future__ import annotations
 
-from backend.services import creator_service, marketing_service, scoring_service, web_search_service
+from backend.services import creator_service, marketing_service, scoring_service, web_search_service, youtube_service
 from backend.services.business_store import get_business
 from backend.data.creator_provider import get_provider
+
+
+def _score_and_rank_real_creators(business: dict, creators: list[dict]) -> list[dict]:
+    """Shared by search_real_creators and search_youtube_creators: apply
+    the same deterministic Fit Score + LLM explanation to a list of
+    externally-discovered (non-demo-dataset) creators, best fit first."""
+    # The search term used to find these (e.g. "karaoke") is often more
+    # specific than the business's own normalized category ("nightlife")
+    # -- great for finding relevant real accounts, but content_relevance
+    # scoring only matches on literal string overlap, so without this a
+    # perfectly relevant creator can score a flat content_relevance of 0
+    # just because "karaoke" != "nightlife" as strings. Tag every result
+    # with the business's own category/sub_category too, regardless of
+    # what search term was actually used to find it.
+    extra_categories = [c for c in (business.get("business_category"), business.get("sub_category")) if c]
+
+    results = []
+    for creator in creators:
+        enriched = {**creator, "categories": list({*creator.get("categories", []), *extra_categories})}
+        score_result = scoring_service.calculate_creator_fit_score(business, enriched)
+        score_result["explanation"] = marketing_service.explain_creator_fit(business, enriched, score_result)
+        results.append({**enriched, **score_result})
+    # Fit score is always the primary sort key ("fit over fame"). Real
+    # follower count only matters as a tie-breaker -- and for
+    # externally-discovered creators, ties are common: most of the score
+    # inputs (engagement, audience, local %) are genuinely unknown and
+    # fall back to the same neutral default for everyone, so without a
+    # tie-breaker "top creators" would come back in arbitrary API order.
+    results.sort(key=lambda r: (r["fit_score"], r.get("followers") or 0), reverse=True)
+    return results
 
 
 def register(mcp) -> None:
@@ -138,15 +168,53 @@ def register(mcp) -> None:
         creators = web_search_service.find_real_creators(category, location, target_audience, max_results)
         if not creators:
             return []
+        return _score_and_rank_real_creators(business, creators)
 
-        results = []
-        for creator in creators:
-            score_result = scoring_service.calculate_creator_fit_score(business, creator)
-            score_result["explanation"] = marketing_service.explain_creator_fit(business, creator, score_result)
-            results.append({
-                **creator,
-                **score_result,
-            })
+    @mcp.tool()
+    def search_youtube_creators(
+        business_id: str,
+        category: str,
+        location: str = "",
+        max_results: int = 5,
+    ) -> list[dict]:
+        """
+        Search the real YouTube Data API for REAL, currently active
+        channels matching a category (optionally narrowed by location
+        text), then score and rank them the same way as rank_creators.
 
-        results.sort(key=lambda r: r["fit_score"], reverse=True)
-        return results
+        Use this ONLY when the user explicitly wants real YouTube
+        creators looked up live, not as part of the normal fast/free
+        recommend flow -- like search_real_creators, this is a real API
+        call with its own quota, kept as a deliberate opt-in action.
+
+        Unlike search_real_creators (which asks an LLM to interpret
+        generic web search results), this hits YouTube's own API
+        directly -- subscriber count comes back exact and verified
+        straight from the platform, not an LLM's guess. It still can't
+        give engagement rate, audience demographics, or collaboration
+        cost (not public API data), so those stay unknown and the fit
+        score treats unknowns as neutral rather than fabricating numbers.
+        Each result is tagged `"source": "youtube_api"` and
+        `"verified": true`.
+
+        Requires YOUTUBE_API to be configured (a Google Cloud API key
+        with the YouTube Data API v3 enabled); returns an empty list
+        (not an error) if it isn't set or the search finds nothing --
+        callers should fall back to search_creators.
+
+        Input: business_id (from analyze_business), category, location
+        (optional -- narrows the search query text, YouTube has no true
+        geographic filter), max_results (default 5).
+
+        Returns: a list of fit-score results (same shape as rank_creators)
+        plus followers (real subscriber count), bio, source_url, verified
+        -- ordered best fit first, not by subscriber count.
+        """
+        business = get_business(business_id)
+        if business is None:
+            raise ValueError(f"Could not find business '{business_id}'. Call analyze_business first.")
+
+        creators = youtube_service.search_creators(category, location, max_results)
+        if not creators:
+            return []
+        return _score_and_rank_real_creators(business, creators)

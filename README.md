@@ -79,6 +79,7 @@ All in `backend/mcp/tools/`, registered by `backend/mcp/server.py`:
 | `analyze_creator` | Deterministic 0–100 Creator Fit Score for one creator vs. one business, with a 5-part breakdown, strengths/weaknesses, and an LLM (or template) explanation. |
 | `rank_creators` | Score + sort a list of candidate creators, best fit first. |
 | `search_real_creators` *(optional/bonus)* | Search the live web (OpenAI web search) for REAL, currently-active creators instead of the demo dataset, then score and rank them the same way. See below. |
+| `search_youtube_creators` *(optional/bonus)* | Search the YouTube Data API v3 for REAL channels with exact, verified subscriber counts (more reliable than web search, YouTube-only), then score and rank them the same way. See below. |
 | `generate_outreach` | Personalized outreach DM draft for a business to send to a creator. Never sends anything automatically. |
 | `generate_campaign` | Full campaign plan (name, strategy, content ideas, offer, budget allocation, expected reach) from a ranked creator shortlist. |
 | `generate_video_script` *(optional/bonus)* | Turns one campaign content idea into a shot-by-shot short-form video script (scenes, timing, on-screen text, caption, hashtags, CTA) — free, instant, no video file produced. |
@@ -294,6 +295,36 @@ the very first call otherwise. Without the key, or if search finds
 nothing, this returns `[]` and callers should fall back to
 `search_creators`.
 
+## Real creator discovery via the YouTube Data API (optional)
+
+`search_youtube_creators` (`backend/services/youtube_service.py`) hits
+YouTube's own Data API v3 directly instead of asking an LLM to interpret
+web search results — `search.list` finds candidate channels, then
+`channels.list` pulls their real `statistics.subscriberCount`. This is
+more reliable than `search_real_creators` for follower counts
+specifically (exact and platform-verified, not an "approximate, if
+mentioned somewhere" guess), but YouTube-only, and still can't verify
+engagement rate, audience demographics, or collaboration cost — same
+honesty rule applies, those stay `null` rather than fabricated. A
+channel that has hidden its subscriber count comes back as `followers:
+null`, not `0`.
+
+Both `search_real_creators` and `search_youtube_creators` tag every
+result with the business's own category/sub_category in addition to
+whatever search term was used to find it (e.g. searching "karaoke" but
+scoring against a business categorized as "nightlife") — otherwise
+content-relevance scoring, which only matches on literal string overlap,
+would flatten every result to the same score just because the search
+term and the category string don't match verbatim. Ties in fit score
+(common for externally-discovered creators, since most inputs fall back
+to the same neutral default) are broken by real follower count — fit
+score is always the primary sort, this only decides ties.
+
+Requires `YOUTUBE_API` — a Google Cloud API key with the **YouTube Data
+API v3** enabled (a free daily quota applies, unlike Veo/OpenAI web
+search). Without it, or if search finds nothing, returns `[]` and
+callers should fall back to `search_creators`.
+
 ## Running it
 
 ```bash
@@ -330,6 +361,7 @@ POST /api/business/find-real     search Google Places by name for disambiguation
 POST /api/business/analyze
 POST /api/creators/search
 POST /api/creators/search-real   real creators via OpenAI web search, scored and ranked
+POST /api/creators/search-youtube real YouTube channels via the YouTube Data API, scored and ranked
 POST /api/creators/rank
 POST /api/outreach/generate
 POST /api/campaign/generate
@@ -360,7 +392,7 @@ and Integrations pages show real backend state, not demo toggles.
 pytest tests/ -v
 ```
 
-72 tests covering: score bounds (0–100), determinism, locality/audience/
+82 tests covering: score bounds (0–100), determinism, locality/audience/
 budget scoring direction (including neutral-not-zero handling for
 unknown fields, e.g. web-search-discovered creators), zero-overlap
 content relevance, empty search results (auto-widening), ranking
@@ -374,10 +406,12 @@ fallback with no key or on lookup failure, real vs. simulated presence
 scoring), general-search intent extraction (LLM + regex fallback),
 HubSpot integration (contact find-or-create, note attachment, graceful
 degradation on missing token/API/unexpected failure), Veo video
-generation (submit/poll/ready/timeout/error paths), and web-search
-creator discovery (JSON/markdown-fence parsing, missing-handle
-filtering, max-results, never-raises) — all of these monkeypatch their
-respective service modules directly, so no real network calls or API
+generation (submit/poll/ready/timeout/error paths), web-search creator
+discovery (JSON/markdown-fence parsing, missing-handle filtering,
+max-results, never-raises), and YouTube creator discovery (real-data
+shape, hidden-subscriber-count handling, max-results, never-raises) —
+all of these monkeypatch their respective service modules directly, so
+no real network calls or API
 keys are needed to run the suite.
 
 ## Demo reliability
